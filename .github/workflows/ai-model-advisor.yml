@@ -1,0 +1,63 @@
+name: AI Model Advisor
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/ai_model_advisor/**"
+      - "tests/test_ai_model_advisor.py"
+      - "skills/ai-model-advisor/**"
+      - "docs/AI_MODEL_ADVISOR.md"
+      - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
+      - ".github/workflows/ai-model-advisor.yml"
+  schedule:
+    # 07:05 America/Vancouver during PDT. GitHub cron uses UTC.
+    - cron: "5 14 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  model-watch-and-profile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependency
+        run: python -m pip install pytest
+
+      - name: Run advisor tests
+        run: python -m pytest tests/test_ai_model_advisor.py
+
+      - name: Scan official model sources
+        run: |
+          mkdir -p model-advisor-output
+          python -m tools.ai_model_advisor.cli scan \
+            --output model-advisor-output/source-scan.md \
+            --json-output model-advisor-output/source-scan.json
+
+      - name: Build profile from public GitHub activity
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.ai_model_advisor.cli profile \
+            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --output model-advisor-output/github-workload.json
+
+      - name: Generate recommendations
+        run: |
+          python -m tools.ai_model_advisor.cli recommend \
+            --profile model-advisor-output/github-workload.json \
+            --output model-advisor-output/recommendation.md \
+            --json-output model-advisor-output/recommendation.json
+
+      - name: Upload model-advisor report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-model-advisor-${{ github.run_id }}
+          path: model-advisor-output/
+          retention-days: 30
