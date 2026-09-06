@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import Recommendation, WorkloadProfile
+from .models import WorkloadProfile
 from .recommend import RecommendationEngine
 
 
