@@ -85,6 +85,60 @@ def test_feedback_requires_repeated_evidence_before_adjusting():
     assert four.adjustment("claude-sonnet-5", "high", "single") > 0
 
 
+def test_feedback_is_scoped_to_task_category():
+    feedback = FeedbackStore(
+        [
+            UsageRecord(
+                provider="anthropic",
+                model_id="claude-opus-5",
+                effort="high",
+                execution_mode="single",
+                outcome="success",
+                task_category="repo_review",
+            )
+            for _ in range(4)
+        ]
+    )
+
+    assert feedback.adjustment(
+        "claude-opus-5",
+        "high",
+        "single",
+        "repo_review",
+    ) > 0
+    assert (
+        feedback.adjustment(
+            "claude-opus-5",
+            "high",
+            "single",
+            "implementation",
+        )
+        == 0
+    )
+
+
+def test_category_feedback_falls_back_to_legacy_untagged_records():
+    feedback = FeedbackStore(
+        [
+            UsageRecord(
+                provider="openai",
+                model_id="gpt-5.6-terra",
+                effort="medium",
+                execution_mode="single",
+                outcome="success",
+            )
+            for _ in range(4)
+        ]
+    )
+
+    assert feedback.adjustment(
+        "gpt-5.6-terra",
+        "medium",
+        "single",
+        "implementation",
+    ) > 0
+
+
 def test_feedback_jsonl_round_trip(tmp_path):
     path = tmp_path / "feedback.jsonl"
     record = UsageRecord(
