@@ -8,6 +8,7 @@ missing, so it cannot silently rewrite an unexpected version of the file.
 from pathlib import Path
 
 
+# Kept as a temporary branch-only repair tool; remove after the generated fix lands.
 TARGET = Path("core/framework/server/routes_execution.py")
 
 
