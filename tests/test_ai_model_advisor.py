@@ -1,9 +1,17 @@
+import json
 from pathlib import Path
 
+from tools.ai_model_advisor import sources as source_module
 from tools.ai_model_advisor.activity import ActivityAnalyzer
 from tools.ai_model_advisor.feedback import FeedbackStore, UsageRecord
 from tools.ai_model_advisor.recommend import RecommendationEngine
 from tools.ai_model_advisor.registry import ModelRegistry
+from tools.ai_model_advisor.sources import (
+    ScanReport,
+    SourceResult,
+    baseline_from_report,
+    scan_official_sources,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "tools" / "ai_model_advisor" / "registry.json"
@@ -153,3 +161,60 @@ def test_feedback_jsonl_round_trip(tmp_path):
     FeedbackStore.append(path, record)
     loaded = FeedbackStore.load(path)
     assert loaded.records == (record,)
+
+
+def test_source_scan_detects_signal_change_against_saved_baseline(tmp_path, monkeypatch):
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "as_of": "2026-09-06",
+                "official_sources": [
+                    {"id": "test_source", "url": "https://example.test/models"}
+                ],
+                "models": [
+                    {
+                        "provider": "anthropic",
+                        "model_id": "claude-sonnet-5",
+                        "label": "Claude Sonnet 5",
+                        "source_ids": ["test_source"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = ModelRegistry(registry_path)
+
+    monkeypatch.setattr(source_module, "_fetch_text", lambda _url: "Claude Sonnet 5")
+    first = scan_official_sources(registry)
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline_from_report(first)), encoding="utf-8")
+
+    monkeypatch.setattr(source_module, "_fetch_text", lambda _url: "Claude Opus 5")
+    second = scan_official_sources(registry, baseline_path)
+    assert second.changed_sources == ["test_source"]
+
+
+def test_failed_source_preserves_previous_baseline_hash():
+    report = ScanReport(
+        generated_at="2026-09-06T00:00:00+00:00",
+        registry_as_of="2026-09-06",
+        changed_sources=[],
+        unknown_signals=[],
+        results=[
+            SourceResult(
+                source_id="test_source",
+                url="https://example.test/models",
+                ok=False,
+                signal_hash="",
+                signals=[],
+                error="temporary network failure",
+            )
+        ],
+    )
+    baseline = baseline_from_report(
+        report,
+        {"source_hashes": {"test_source": "previous-hash"}},
+    )
+    assert baseline["source_hashes"]["test_source"] == "previous-hash"
