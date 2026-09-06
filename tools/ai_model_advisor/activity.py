@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import json
+import re
+import urllib.request
 from collections import Counter
 from collections.abc import Iterable
-import json
 from pathlib import Path
-import re
 from typing import Any
-import urllib.request
 
 from .models import WorkloadProfile
 
