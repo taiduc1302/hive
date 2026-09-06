@@ -27,7 +27,7 @@ There is no hidden API in this project for reading a user's entire ChatGPT profi
 python -m tools.ai_model_advisor.cli profile --input tools/ai_model_advisor/sample_activity.json --output /tmp/workload.json
 python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --output /tmp/recommendation.md
 python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personalized.md
-python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0
+python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0 --task-category implementation
 python -m tools.ai_model_advisor.cli scan --output /tmp/source-scan.md --json-output /tmp/source-scan.json
 ```
 
@@ -36,6 +36,10 @@ python -m tools.ai_model_advisor.cli scan --output /tmp/source-scan.md --json-ou
 Feedback is JSONL and stays local unless the user deliberately commits/uploads it. A record can include outcome (`success`, `partial`, `failure`), retries, latency, cost, task category, and a note.
 
 The router does **not** react to one-off anecdotes. Fewer than three matching observations have zero scoring effect. Larger samples are shrunk toward neutral and capped so empirical history tunes the registry instead of replacing it.
+
+When feedback has a `task_category`, it is scoped to that type of work. For example, repeated success on `repo_review` can improve a model's score for future repository reviews but does not raise that model's score for `implementation`. Older untagged feedback remains a conservative fallback for backward compatibility.
+
+The router chooses the dominant category from the current workload profile before applying personal evidence. This keeps personalization task-aware rather than turning a generally successful model into the default for every job.
 
 ## Recommendation dimensions
 
