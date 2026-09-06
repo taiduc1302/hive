@@ -5,7 +5,6 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-
 _OUTCOME_VALUE = {"success": 1.0, "partial": 0.5, "failure": 0.0}
 
 
