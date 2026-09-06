@@ -36,12 +36,34 @@ jobs:
       - name: Run advisor tests
         run: python -m pytest tests/test_ai_model_advisor.py
 
+      - name: Restore previous source baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: .model-advisor-cache/source-baseline.json
+          key: ai-model-advisor-baseline-${{ github.run_id }}
+          restore-keys: |
+            ai-model-advisor-baseline-
+
       - name: Scan official model sources
+        shell: bash
         run: |
-          mkdir -p model-advisor-output
+          mkdir -p model-advisor-output .model-advisor-cache
+          baseline_args=()
+          if [ -f .model-advisor-cache/source-baseline.json ]; then
+            baseline_args=(--baseline .model-advisor-cache/source-baseline.json)
+          fi
           python -m tools.ai_model_advisor.cli scan \
+            "${baseline_args[@]}" \
             --output model-advisor-output/source-scan.md \
-            --json-output model-advisor-output/source-scan.json
+            --json-output model-advisor-output/source-scan.json \
+            --write-baseline model-advisor-output/source-baseline.json
+          cp model-advisor-output/source-baseline.json .model-advisor-cache/source-baseline.json
+
+      - name: Save current source baseline
+        uses: actions/cache/save@v4
+        with:
+          path: .model-advisor-cache/source-baseline.json
+          key: ai-model-advisor-baseline-${{ github.run_id }}
 
       - name: Build profile from public GitHub activity
         env:
