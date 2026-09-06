@@ -37,6 +37,7 @@ class FeedbackStore:
     Adjustments are deliberately conservative: fewer than three matching
     observations have no routing effect, and larger samples are shrunk toward
     neutral so a short streak cannot dominate the static capability model.
+    Category-tagged feedback never leaks into a different task category.
     """
 
     def __init__(self, records: Iterable[UsageRecord] = ()) -> None:
@@ -66,20 +67,58 @@ class FeedbackStore:
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record.as_dict(), ensure_ascii=False) + "\n")
 
-    def matching(self, model_id: str, effort: str, execution_mode: str) -> tuple[UsageRecord, ...]:
+    def matching(
+        self,
+        model_id: str,
+        effort: str,
+        execution_mode: str,
+        task_category: str | None = None,
+    ) -> tuple[UsageRecord, ...]:
+        model_records = tuple(record for record in self.records if record.model_id == model_id)
+
+        if task_category:
+            category_records = tuple(
+                record for record in model_records if record.task_category == task_category
+            )
+            exact_category = tuple(
+                record
+                for record in category_records
+                if record.effort == effort and record.execution_mode == execution_mode
+            )
+            if len(exact_category) >= 3:
+                return exact_category
+            if len(category_records) >= 3:
+                return category_records
+
+            # Backward compatibility for feedback captured before categories
+            # existed. Never borrow evidence from a different named category.
+            untagged = tuple(record for record in model_records if record.task_category is None)
+            exact_untagged = tuple(
+                record
+                for record in untagged
+                if record.effort == effort and record.execution_mode == execution_mode
+            )
+            if len(exact_untagged) >= 3:
+                return exact_untagged
+            return untagged
+
         exact = tuple(
             record
-            for record in self.records
-            if record.model_id == model_id
-            and record.effort == effort
-            and record.execution_mode == execution_mode
+            for record in model_records
+            if record.effort == effort and record.execution_mode == execution_mode
         )
         if len(exact) >= 3:
             return exact
-        return tuple(record for record in self.records if record.model_id == model_id)
+        return model_records
 
-    def adjustment(self, model_id: str, effort: str, execution_mode: str) -> float:
-        records = self.matching(model_id, effort, execution_mode)
+    def adjustment(
+        self,
+        model_id: str,
+        effort: str,
+        execution_mode: str,
+        task_category: str | None = None,
+    ) -> float:
+        records = self.matching(model_id, effort, execution_mode, task_category)
         if len(records) < 3:
             return 0.0
         observed = sum(_OUTCOME_VALUE[record.outcome] for record in records) / len(records)
@@ -92,6 +131,12 @@ class FeedbackStore:
         shrunk = 0.5 + (quality - 0.5) * sample_weight
         return round((shrunk - 0.5) * 16.0, 3)
 
-    def summary(self, model_id: str, effort: str, execution_mode: str) -> tuple[int, float]:
-        records = self.matching(model_id, effort, execution_mode)
-        return len(records), self.adjustment(model_id, effort, execution_mode)
+    def summary(
+        self,
+        model_id: str,
+        effort: str,
+        execution_mode: str,
+        task_category: str | None = None,
+    ) -> tuple[int, float]:
+        records = self.matching(model_id, effort, execution_mode, task_category)
+        return len(records), self.adjustment(model_id, effort, execution_mode, task_category)
