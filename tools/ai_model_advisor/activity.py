@@ -4,8 +4,9 @@ import json
 import re
 import urllib.request
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .models import WorkloadProfile
 
@@ -43,7 +44,16 @@ class ActivityAnalyzer:
     def from_texts(self, texts: Iterable[str]) -> WorkloadProfile:
         items = [text.strip() for text in texts if text and text.strip()]
         categories: Counter[str] = Counter()
-        dims = Counter({"coding": 0.0, "reasoning": 0.0, "agentic": 0.0, "ambiguity": 0.0, "breadth": 0.0, "parallelism": 0.0})
+        dims = Counter(
+            {
+                "coding": 0.0,
+                "reasoning": 0.0,
+                "agentic": 0.0,
+                "ambiguity": 0.0,
+                "breadth": 0.0,
+                "parallelism": 0.0,
+            }
+        )
         evidence: list[str] = []
 
         for text in items:
@@ -76,16 +86,24 @@ class ActivityAnalyzer:
                 dims["agentic"] += 1.5
 
         count = max(1, len(items))
-        scale = max(1.0, count ** 0.5)
+        scale = max(1.0, count**0.5)
 
         def dimension(name: str, base: float = 1.0) -> float:
             return _clamp(base + (dims[name] / scale))
 
         return WorkloadProfile(
-            coding=dimension("coding"), reasoning=dimension("reasoning"), agentic=dimension("agentic"),
-            ambiguity=dimension("ambiguity"), breadth=dimension("breadth"), parallelism=dimension("parallelism"),
-            latency_sensitivity=3.0, cost_sensitivity=3.0, volume=_clamp(1.0 + count / 20.0),
-            categories=dict(categories), activity_count=len(items), evidence=evidence[:12],
+            coding=dimension("coding"),
+            reasoning=dimension("reasoning"),
+            agentic=dimension("agentic"),
+            ambiguity=dimension("ambiguity"),
+            breadth=dimension("breadth"),
+            parallelism=dimension("parallelism"),
+            latency_sensitivity=3.0,
+            cost_sensitivity=3.0,
+            volume=_clamp(1.0 + count / 20.0),
+            categories=dict(categories),
+            activity_count=len(items),
+            evidence=evidence[:12],
         )
 
     def from_generic_json(self, path: str | Path) -> WorkloadProfile:
@@ -148,7 +166,10 @@ class ActivityAnalyzer:
     def fetch_github_public_events(username: str, token: str | None = None) -> list[dict[str, Any]]:
         request = urllib.request.Request(
             f"https://api.github.com/users/{username}/events?per_page=100",
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "hive-ai-model-advisor/0.1"},
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "hive-ai-model-advisor/0.1",
+            },
         )
         if token:
             request.add_header("Authorization", f"Bearer {token}")

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
 
 
 _OUTCOME_VALUE = {"success": 1.0, "partial": 0.5, "failure": 0.0}
@@ -84,7 +84,10 @@ class FeedbackStore:
         if len(records) < 3:
             return 0.0
         observed = sum(_OUTCOME_VALUE[record.outcome] for record in records) / len(records)
-        retry_penalty = min(0.20, sum(record.retries for record in records) / max(1, len(records)) * 0.05)
+        retry_penalty = min(
+            0.20,
+            sum(record.retries for record in records) / max(1, len(records)) * 0.05,
+        )
         quality = max(0.0, observed - retry_penalty)
         sample_weight = min(1.0, (len(records) - 2) / 8.0)
         shrunk = 0.5 + (quality - 0.5) * sample_weight

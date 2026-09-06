@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Iterable
 
 from .feedback import FeedbackStore
 from .models import ModelProfile, Recommendation, WorkloadProfile
@@ -98,9 +98,13 @@ class RecommendationEngine:
             reasons.append(f"{effort} is reserved here for unusually difficult or long-horizon work")
         sample_count, _ = self.feedback.summary(model.model_id, effort, mode)
         if feedback_adjustment >= 1.0:
-            reasons.append(f"Personal history improves this configuration's score ({sample_count} observations)")
+            reasons.append(
+                f"Personal history improves this configuration's score ({sample_count} observations)"
+            )
         elif feedback_adjustment <= -1.0:
-            tradeoffs.append(f"Personal history reduces confidence in this configuration ({sample_count} observations)")
+            tradeoffs.append(
+                f"Personal history reduces confidence in this configuration ({sample_count} observations)"
+            )
         if model.capabilities.get("speed", 3) <= 2:
             tradeoffs.append("Expect higher latency")
         if model.cost_efficiency <= 2:
@@ -126,7 +130,13 @@ class RecommendationEngine:
             mode = self._execution_mode(model, workload)
             feedback_adjustment = self.feedback.adjustment(model.model_id, effort, mode)
             score = self._base_score(model, workload) + feedback_adjustment
-            reasons, tradeoffs = self._explain(model, workload, effort, mode, feedback_adjustment)
+            reasons, tradeoffs = self._explain(
+                model,
+                workload,
+                effort,
+                mode,
+                feedback_adjustment,
+            )
             scored.append(
                 Recommendation(
                     provider=model.provider,
