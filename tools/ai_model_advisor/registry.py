@@ -7,7 +7,6 @@ from typing import Any
 
 from .models import ModelProfile
 
-
 DEFAULT_REGISTRY = Path(__file__).with_name("registry.json")
 
 
