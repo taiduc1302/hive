@@ -96,13 +96,21 @@ def _signal_hash(signals: list[str]) -> str:
     return hashlib.sha256(normalized).hexdigest()
 
 
+def load_baseline(path: str | Path | None) -> dict[str, Any]:
+    if not path:
+        return {}
+    target = Path(path)
+    if not target.exists():
+        return {}
+    data = json.loads(target.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
 def scan_official_sources(
     registry: ModelRegistry,
     baseline_path: str | Path | None = None,
 ) -> ScanReport:
-    baseline: dict[str, Any] = {}
-    if baseline_path and Path(baseline_path).exists():
-        baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+    baseline = load_baseline(baseline_path)
     baseline_hashes = baseline.get("source_hashes", {}) if isinstance(baseline, dict) else {}
 
     results: list[SourceResult] = []
@@ -145,12 +153,18 @@ def scan_official_sources(
     )
 
 
-def baseline_from_report(report: ScanReport) -> dict[str, Any]:
+def baseline_from_report(
+    report: ScanReport,
+    previous_baseline: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    previous_hashes = (previous_baseline or {}).get("source_hashes", {})
+    source_hashes = dict(previous_hashes) if isinstance(previous_hashes, dict) else {}
+    source_hashes.update(
+        {item.source_id: item.signal_hash for item in report.results if item.ok}
+    )
     return {
         "generated_at": report.generated_at,
-        "source_hashes": {
-            item.source_id: item.signal_hash for item in report.results if item.ok
-        },
+        "source_hashes": source_hashes,
     }
 
 
