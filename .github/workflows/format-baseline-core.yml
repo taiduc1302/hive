@@ -1,0 +1,49 @@
+name: Format Baseline Core
+
+on:
+  push:
+    branches:
+      - fix/baseline-ruff
+    paths:
+      - ".github/workflows/format-baseline-core.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install locked core dev dependencies
+        run: uv sync --project core --group dev
+
+      - name: Format core with repository Ruff version
+        run: uv run --project core ruff format core/
+
+      - name: Verify lint and format
+        run: |
+          uv run --project core ruff check core/
+          uv run --project core ruff format --check core/
+
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core/
+          git commit -m "style: format baseline core files"
+          git push origin HEAD:fix/baseline-ruff
