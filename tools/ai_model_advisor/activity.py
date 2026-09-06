@@ -10,7 +10,6 @@ from typing import Any
 
 from .models import WorkloadProfile
 
-
 CATEGORY_PATTERNS: dict[str, tuple[str, ...]] = {
     "implementation": ("implement", "feature", "code", "endpoint", "frontend", "backend", "script"),
     "debugging": ("bug", "debug", "error", "trace", "race condition", "failing test", "fix"),
