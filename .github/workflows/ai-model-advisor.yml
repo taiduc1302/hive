@@ -89,6 +89,15 @@ jobs:
             --output model-advisor-output/routing-matrix.md \
             --json-output model-advisor-output/routing-matrix.json
 
+      - name: Publish advisor summary
+        shell: bash
+        run: |
+          cat model-advisor-output/recommendation.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/routing-matrix.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/source-scan.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload model-advisor report
         uses: actions/upload-artifact@v4
         with:
