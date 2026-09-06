@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .activity import ActivityAnalyzer
 from .feedback import FeedbackStore, UsageRecord
+from .matrix import build_routing_matrix, routing_matrix_markdown
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
 from .report import recommendation_markdown
@@ -28,18 +29,20 @@ def _profile_to_json(profile) -> str:
     return json.dumps(profile.as_dict(), ensure_ascii=False, indent=2) + "\n"
 
 
+def _activity_texts(args: argparse.Namespace, analyzer: ActivityAnalyzer) -> list[str]:
+    if args.chatgpt_export:
+        return analyzer.texts_from_chatgpt_export(args.chatgpt_export)
+    if args.github_user:
+        events = analyzer.fetch_github_public_events(args.github_user, os.getenv("GITHUB_TOKEN"))
+        return analyzer.texts_from_github_events(events)
+    if args.input:
+        return analyzer.texts_from_generic_json(args.input)
+    raise SystemExit("Provide --input, --chatgpt-export, or --github-user")
+
+
 def command_profile(args: argparse.Namespace) -> int:
     analyzer = ActivityAnalyzer()
-    if args.chatgpt_export:
-        profile = analyzer.from_chatgpt_export(args.chatgpt_export)
-    elif args.github_user:
-        profile = analyzer.from_github_events(
-            analyzer.fetch_github_public_events(args.github_user, os.getenv("GITHUB_TOKEN"))
-        )
-    elif args.input:
-        profile = analyzer.from_generic_json(args.input)
-    else:
-        raise SystemExit("Provide --input, --chatgpt-export, or --github-user")
+    profile = analyzer.from_texts(_activity_texts(args, analyzer))
     _write(args.output, _profile_to_json(profile))
     return 0
 
@@ -77,6 +80,26 @@ def command_recommend(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_matrix(args: argparse.Namespace) -> int:
+    analyzer = ActivityAnalyzer()
+    profiles = analyzer.category_profiles_from_texts(_activity_texts(args, analyzer))
+    registry = ModelRegistry(args.registry)
+    feedback = FeedbackStore.load(args.feedback)
+    engine = RecommendationEngine(registry, feedback)
+    rows = build_routing_matrix(
+        profiles,
+        engine,
+        providers=args.provider or None,
+        include_limited=args.include_limited,
+        alternatives=args.alternatives,
+    )
+    _write(args.output, routing_matrix_markdown(rows, registry.as_of))
+    if args.json_output:
+        payload = {"registry_as_of": registry.as_of, "routing_matrix": rows}
+        _write(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
 def command_feedback_add(args: argparse.Namespace) -> int:
     record = UsageRecord(
         provider=args.provider,
@@ -107,6 +130,12 @@ def command_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_activity_source_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--input")
+    parser.add_argument("--chatgpt-export")
+    parser.add_argument("--github-user")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Track AI model changes and recommend model/mode by workload"
@@ -114,9 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     profile = sub.add_parser("profile")
-    profile.add_argument("--input")
-    profile.add_argument("--chatgpt-export")
-    profile.add_argument("--github-user")
+    _add_activity_source_arguments(profile)
     profile.add_argument("--output", required=True)
     profile.set_defaults(func=command_profile)
 
@@ -132,6 +159,17 @@ def build_parser() -> argparse.ArgumentParser:
     recommend.add_argument("--output", required=True)
     recommend.add_argument("--json-output")
     recommend.set_defaults(func=command_recommend)
+
+    matrix = sub.add_parser("matrix")
+    _add_activity_source_arguments(matrix)
+    matrix.add_argument("--registry")
+    matrix.add_argument("--provider", action="append", choices=["openai", "anthropic"])
+    matrix.add_argument("--include-limited", action="store_true")
+    matrix.add_argument("--feedback")
+    matrix.add_argument("--alternatives", type=int, default=2, choices=[0, 1, 2, 3])
+    matrix.add_argument("--output", required=True)
+    matrix.add_argument("--json-output")
+    matrix.set_defaults(func=command_matrix)
 
     feedback = sub.add_parser("feedback-add")
     feedback.add_argument("--feedback", required=True)
