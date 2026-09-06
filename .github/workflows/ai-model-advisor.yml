@@ -80,6 +80,15 @@ jobs:
             --output model-advisor-output/recommendation.md \
             --json-output model-advisor-output/recommendation.json
 
+      - name: Generate task routing matrix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.ai_model_advisor.cli matrix \
+            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --output model-advisor-output/routing-matrix.md \
+            --json-output model-advisor-output/routing-matrix.json
+
       - name: Upload model-advisor report
         uses: actions/upload-artifact@v4
         with:
