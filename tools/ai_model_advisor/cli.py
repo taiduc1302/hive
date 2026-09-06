@@ -10,7 +10,12 @@ from .feedback import FeedbackStore, UsageRecord
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
 from .report import recommendation_markdown
-from .sources import baseline_from_report, scan_markdown, scan_official_sources
+from .sources import (
+    baseline_from_report,
+    load_baseline,
+    scan_markdown,
+    scan_official_sources,
+)
 
 
 def _write(path: str | Path, text: str) -> None:
@@ -91,12 +96,14 @@ def command_feedback_add(args: argparse.Namespace) -> int:
 
 def command_scan(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
+    previous_baseline = load_baseline(args.baseline)
     report = scan_official_sources(registry, args.baseline)
     _write(args.output, scan_markdown(report))
     if args.json_output:
         _write(args.json_output, json.dumps(report.as_dict(), ensure_ascii=False, indent=2) + "\n")
     if args.write_baseline:
-        _write(args.write_baseline, json.dumps(baseline_from_report(report), indent=2) + "\n")
+        baseline = baseline_from_report(report, previous_baseline)
+        _write(args.write_baseline, json.dumps(baseline, indent=2) + "\n")
     return 0
 
 
