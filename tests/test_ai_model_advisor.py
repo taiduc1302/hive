@@ -4,6 +4,7 @@ from pathlib import Path
 from tools.ai_model_advisor import sources as source_module
 from tools.ai_model_advisor.activity import ActivityAnalyzer
 from tools.ai_model_advisor.feedback import FeedbackStore, UsageRecord
+from tools.ai_model_advisor.matrix import build_routing_matrix, routing_matrix_markdown
 from tools.ai_model_advisor.recommend import RecommendationEngine
 from tools.ai_model_advisor.registry import ModelRegistry
 from tools.ai_model_advisor.sources import (
@@ -218,3 +219,36 @@ def test_failed_source_preserves_previous_baseline_hash():
         {"source_hashes": {"test_source": "previous-hash"}},
     )
     assert baseline["source_hashes"]["test_source"] == "previous-hash"
+
+
+def test_category_profiles_keep_routing_context_separate():
+    analyzer = ActivityAnalyzer()
+    profiles = analyzer.category_profiles_from_texts(
+        [
+            "Implement a feature in the API",
+            "Debug an unknown root cause in the whole repository",
+            "Research and compare the latest agent orchestration options",
+        ]
+    )
+    assert {"implementation", "debugging", "repo_review", "research"} <= set(profiles)
+    for category, profile in profiles.items():
+        assert profile.categories == {category: profile.activity_count}
+
+
+def test_routing_matrix_returns_actionable_rows():
+    analyzer = ActivityAnalyzer()
+    profiles = analyzer.category_profiles_from_texts(
+        [
+            "Implement a small endpoint",
+            "Implement another backend feature",
+            "Audit the whole repository architecture and investigate unknown bugs",
+        ]
+    )
+    registry = ModelRegistry(REGISTRY)
+    rows = build_routing_matrix(profiles, RecommendationEngine(registry))
+    assert rows
+    assert all(row["primary"]["model_id"] for row in rows)
+    assert all(row["primary"]["effort"] for row in rows)
+    markdown = routing_matrix_markdown(rows, registry.as_of)
+    assert "AI Model Routing Matrix" in markdown
+    assert "implementation" in markdown
