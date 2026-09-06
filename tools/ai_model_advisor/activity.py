@@ -33,8 +33,17 @@ def _text_from_chatgpt_node(node: dict[str, Any]) -> str:
     return " ".join(part for part in parts if isinstance(part, str))
 
 
+def _categories_for_text(text: str) -> set[str]:
+    lower = text.lower()
+    return {
+        category
+        for category, patterns in CATEGORY_PATTERNS.items()
+        if any(pattern in lower for pattern in patterns)
+    }
+
+
 class ActivityAnalyzer:
-    """Turn activity text into a compact workload profile.
+    """Turn activity text into compact overall and category workload profiles.
 
     This intentionally has no private ChatGPT-history API. It accepts an explicit
     ChatGPT data export, generic activity JSON, or GitHub public events.
@@ -57,11 +66,9 @@ class ActivityAnalyzer:
 
         for text in items:
             lower = text.lower()
-            matched: set[str] = set()
-            for category, patterns in CATEGORY_PATTERNS.items():
-                if any(pattern in lower for pattern in patterns):
-                    categories[category] += 1
-                    matched.add(category)
+            matched = _categories_for_text(text)
+            for category in matched:
+                categories[category] += 1
             if matched:
                 evidence.append(text[:180].replace("\n", " "))
             if matched & {"implementation", "debugging", "architecture", "repo_review"}:
@@ -105,7 +112,26 @@ class ActivityAnalyzer:
             evidence=evidence[:12],
         )
 
-    def from_generic_json(self, path: str | Path) -> WorkloadProfile:
+    def category_profiles_from_texts(self, texts: Iterable[str]) -> dict[str, WorkloadProfile]:
+        items = [text.strip() for text in texts if text and text.strip()]
+        grouped: dict[str, list[str]] = {category: [] for category in CATEGORY_PATTERNS}
+        for text in items:
+            for category in _categories_for_text(text):
+                grouped[category].append(text)
+
+        profiles: dict[str, WorkloadProfile] = {}
+        for category, category_texts in grouped.items():
+            if not category_texts:
+                continue
+            profile = self.from_texts(category_texts)
+            # Force the routing context to the row's category even when one
+            # activity matched several categories.
+            profile.categories = {category: len(category_texts)}
+            profiles[category] = profile
+        return profiles
+
+    @staticmethod
+    def texts_from_generic_json(path: str | Path) -> list[str]:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         if isinstance(data, dict):
             records = data.get("activities", data.get("items", []))
@@ -113,15 +139,18 @@ class ActivityAnalyzer:
             records = data
         else:
             raise ValueError("Activity JSON must be a list or object")
-        texts = []
+        texts: list[str] = []
         for record in records:
             if isinstance(record, str):
                 texts.append(record)
             elif isinstance(record, dict):
-                texts.append(" ".join(str(record.get(k, "")) for k in ("title", "text", "body", "action")))
-        return self.from_texts(texts)
+                text = " ".join(str(record.get(key, "")) for key in ("title", "text", "body", "action"))
+                if text.strip():
+                    texts.append(text)
+        return texts
 
-    def from_chatgpt_export(self, path: str | Path) -> WorkloadProfile:
+    @staticmethod
+    def texts_from_chatgpt_export(path: str | Path) -> list[str]:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         conversations = data if isinstance(data, list) else data.get("conversations", [])
         texts: list[str] = []
@@ -142,9 +171,10 @@ class ActivityAnalyzer:
                         text = _text_from_chatgpt_node(node)
                         if text:
                             texts.append(text)
-        return self.from_texts(texts)
+        return texts
 
-    def from_github_events(self, events: list[dict[str, Any]]) -> WorkloadProfile:
+    @staticmethod
+    def texts_from_github_events(events: list[dict[str, Any]]) -> list[str]:
         texts: list[str] = []
         for event in events:
             repo = (event.get("repo") or {}).get("name", "")
@@ -159,7 +189,16 @@ class ActivityAnalyzer:
                 if isinstance(commit, dict) and commit.get("message"):
                     fragments.append(str(commit["message"]))
             texts.append(" ".join(fragments))
-        return self.from_texts(texts)
+        return texts
+
+    def from_generic_json(self, path: str | Path) -> WorkloadProfile:
+        return self.from_texts(self.texts_from_generic_json(path))
+
+    def from_chatgpt_export(self, path: str | Path) -> WorkloadProfile:
+        return self.from_texts(self.texts_from_chatgpt_export(path))
+
+    def from_github_events(self, events: list[dict[str, Any]]) -> WorkloadProfile:
+        return self.from_texts(self.texts_from_github_events(events))
 
     @staticmethod
     def fetch_github_public_events(username: str, token: str | None = None) -> list[dict[str, Any]]:
