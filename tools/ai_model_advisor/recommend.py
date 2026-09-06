@@ -53,6 +53,12 @@ class RecommendationEngine:
         return "single" if "single" in modes else next(iter(model.execution_modes), "single")
 
     @staticmethod
+    def _primary_category(workload: WorkloadProfile) -> str | None:
+        if not workload.categories:
+            return None
+        return max(workload.categories.items(), key=lambda item: (item[1], item[0]))[0]
+
+    @staticmethod
     def _base_score(model: ModelProfile, workload: WorkloadProfile) -> float:
         c = model.capabilities
         need_total = workload.reasoning + workload.coding + workload.agentic + workload.breadth
@@ -82,6 +88,7 @@ class RecommendationEngine:
         workload: WorkloadProfile,
         effort: str,
         mode: str,
+        task_category: str | None,
         feedback_adjustment: float,
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         reasons: list[str] = []
@@ -96,14 +103,22 @@ class RecommendationEngine:
             reasons.append("Repository breadth and parallelizable work justify structured orchestration")
         if effort in {"xhigh", "max"}:
             reasons.append(f"{effort} is reserved here for unusually difficult or long-horizon work")
-        sample_count, _ = self.feedback.summary(model.model_id, effort, mode)
+        sample_count, _ = self.feedback.summary(
+            model.model_id,
+            effort,
+            mode,
+            task_category,
+        )
+        category_label = f" for {task_category}" if task_category else ""
         if feedback_adjustment >= 1.0:
             reasons.append(
-                f"Personal history improves this configuration's score ({sample_count} observations)"
+                f"Personal history{category_label} improves this configuration's score "
+                f"({sample_count} observations)"
             )
         elif feedback_adjustment <= -1.0:
             tradeoffs.append(
-                f"Personal history reduces confidence in this configuration ({sample_count} observations)"
+                f"Personal history{category_label} reduces confidence in this configuration "
+                f"({sample_count} observations)"
             )
         if model.capabilities.get("speed", 3) <= 2:
             tradeoffs.append("Expect higher latency")
@@ -125,16 +140,23 @@ class RecommendationEngine:
         top_n: int = 3,
     ) -> list[Recommendation]:
         scored: list[Recommendation] = []
+        task_category = self._primary_category(workload)
         for model in self.registry.candidates(providers=providers, include_limited=include_limited):
             effort = self._effort(model, workload)
             mode = self._execution_mode(model, workload)
-            feedback_adjustment = self.feedback.adjustment(model.model_id, effort, mode)
+            feedback_adjustment = self.feedback.adjustment(
+                model.model_id,
+                effort,
+                mode,
+                task_category,
+            )
             score = self._base_score(model, workload) + feedback_adjustment
             reasons, tradeoffs = self._explain(
                 model,
                 workload,
                 effort,
                 mode,
+                task_category,
                 feedback_adjustment,
             )
             scored.append(
