@@ -38,6 +38,8 @@ python -m tools.ai_model_advisor.cli matrix --chatgpt-export /path/to/conversati
 python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personalized.md
 python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0 --latency-seconds 42 --cost-usd 0.31 --task-category implementation --task-id api-endpoint-17
 python -m tools.ai_model_advisor.cli feedback-import-hive --events /path/to/session/events.jsonl --details /path/to/session/logs/details.jsonl --feedback ~/.hive/model-feedback.jsonl --task-category repo_review --output /tmp/hive-feedback-import.md
+python -m tools.ai_model_advisor.cli feedback-import-hive-root --root ~/.hive --feedback ~/.hive/model-feedback.jsonl --output /tmp/hive-history-preview.md
+python -m tools.ai_model_advisor.cli feedback-import-hive-root --root ~/.hive --feedback ~/.hive/model-feedback.jsonl --apply --output /tmp/hive-history-import.md
 python -m tools.ai_model_advisor.cli scan --baseline /tmp/source-baseline.json --write-baseline /tmp/source-baseline.json --output /tmp/source-scan.md --json-output /tmp/source-scan.json
 ```
 
@@ -70,6 +72,7 @@ Hive already persists the signals the advisor needs instead of requiring the use
 - a node that changed models mid-run is skipped instead of assigning its combined outcome/cost to one model;
 - runtime details are joined only when the node ID has one unambiguous detail record;
 - explicit node/judge outcomes take precedence; execution-level success/failure is attributed only when the **full execution** contains one LLM node, even when `--node-id` filters the import;
+- `paused` or `escalated` runtime exits are recorded as `partial`, even if a lower-level success flag is true;
 - provider cost is summed across LLM turns; a missing/zero provider cost is treated as unknown, not free;
 - corrupt/partial JSONL lines are ignored and reported rather than aborting the whole import;
 - each imported observation receives `source_id=hive:<execution_id>:<node_id>`, so rerunning the same import is idempotent.
@@ -91,6 +94,26 @@ python -m tools.ai_model_advisor.cli feedback-import-hive \
 ```
 
 Run the command with `--dry-run` first when inspecting a new trace shape. In dry-run mode the importer produces its report but does not modify the feedback store.
+
+### Bulk Hive history import
+
+`feedback-import-hive-root` discovers past session telemetry below a Hive storage root. Discovery follows the SessionStore contract rather than assuming a particular agent name: only paths shaped like `.../sessions/<session_id>/events.jsonl` are accepted. Nested worker-local `events.jsonl` files and unrelated logs are ignored. A sibling `logs/details.jsonl` file is joined when present.
+
+Bulk import is **preview-only by default**. A first pass such as:
+
+```bash
+python -m tools.ai_model_advisor.cli feedback-import-hive-root \
+  --root ~/.hive \
+  --feedback ~/.hive/model-feedback.jsonl \
+  --output /tmp/hive-history-preview.md \
+  --json-output /tmp/hive-history-preview.json
+```
+
+reports discovered sessions, eligible observations, mixed/unknown-model skips, ambiguous runtime-detail joins, unknown outcomes, and corrupt lines without changing feedback. Add `--apply` only after reviewing that report.
+
+Bulk observations namespace their idempotency key with the session ID (`hive:<session_id>:<execution_id>:<node_id>`), so even reused execution IDs across different sessions cannot collide. Repeating `--apply` on the same history therefore does not duplicate evidence.
+
+Bulk history is intentionally imported as `effort=observed` and `execution=hive_agent_loop` unless explicitly overridden. It is suitable for conservative model-level outcome learning. Use the single-session/node importer with explicit `task_id`, effort, and execution mode when building controlled paired efficiency evidence.
 
 ### Paired cost and latency evidence
 
