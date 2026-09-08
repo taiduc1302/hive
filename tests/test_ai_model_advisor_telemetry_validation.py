@@ -17,16 +17,24 @@ def _record(**overrides):
     return UsageRecord(**values)
 
 
-def test_cache_telemetry_can_cover_all_input_tokens():
-    record = _record(cached_tokens=100, cache_creation_tokens=100)
-    assert record.cached_tokens == 100
-    assert record.cache_creation_tokens == 100
+def test_cache_telemetry_can_partition_all_input_tokens():
+    record = _record(cached_tokens=70, cache_creation_tokens=30)
+    assert record.cached_tokens == 70
+    assert record.cache_creation_tokens == 30
 
 
 @pytest.mark.parametrize("field", ["cached_tokens", "cache_creation_tokens"])
-def test_cache_telemetry_cannot_exceed_input_tokens(field):
+def test_cache_telemetry_cannot_individually_exceed_input_tokens(field):
     with pytest.raises(ValueError, match=f"{field} must be <= input_tokens"):
         _record(**{field: 101})
+
+
+def test_combined_cache_telemetry_cannot_exceed_input_tokens():
+    with pytest.raises(
+        ValueError,
+        match=r"cached_tokens \+ cache_creation_tokens must be <= input_tokens",
+    ):
+        _record(cached_tokens=70, cache_creation_tokens=31)
 
 
 def test_cache_telemetry_without_input_total_remains_accepted():
