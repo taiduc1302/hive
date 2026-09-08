@@ -166,7 +166,10 @@ def feedback_audit_markdown(audit: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "A non-zero empirical adjustment should be explainable by this report. Rows below threshold remain historical evidence but do not independently change routing.",
+            (
+                "A non-zero empirical adjustment should be explainable by this report. "
+                "Rows below threshold remain historical evidence but do not independently change routing."
+            ),
             "",
         ]
     )
