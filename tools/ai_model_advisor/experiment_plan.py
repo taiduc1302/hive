@@ -1,0 +1,262 @@
+from __future__ import annotations
+
+import hashlib
+from typing import Any
+
+from .feedback import PAIRED_EFFICIENCY_MIN, FeedbackStore
+from .models import ModelProfile, Recommendation, WorkloadProfile
+from .recommend import RecommendationEngine
+
+
+def _config_key(rec: Recommendation) -> tuple[str, str, str]:
+    return rec.model_id, rec.effort, rec.execution_mode
+
+
+def _config_text(rec: Recommendation) -> str:
+    return f"{rec.model_id} / {rec.effort} / {rec.execution_mode}"
+
+
+def _model_profile(engine: RecommendationEngine, model_id: str) -> ModelProfile | None:
+    matches = [model for model in engine.registry.models if model.model_id == model_id]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _rank_same_model_configurations(
+    engine: RecommendationEngine,
+    model: ModelProfile,
+    workload: WorkloadProfile,
+    category: str,
+) -> list[Recommendation]:
+    preferred_effort = engine._effort(model, workload)
+    preferred_mode = engine._execution_mode(model, workload)
+    rows = [
+        engine._score_configuration(
+            model,
+            workload,
+            effort,
+            mode,
+            preferred_effort,
+            preferred_mode,
+            category,
+        )
+        for effort in model.efforts
+        for mode in model.execution_modes
+    ]
+    rows.sort(
+        key=lambda item: (
+            item.score,
+            item.configuration_adjustment,
+            item.effort == preferred_effort,
+            item.execution_mode == preferred_mode,
+        ),
+        reverse=True,
+    )
+    return rows
+
+
+def _successful_task_ids(
+    feedback: FeedbackStore,
+    category: str,
+    rec: Recommendation,
+) -> set[str]:
+    return {
+        record.task_id
+        for record in feedback.records
+        if record.task_id
+        and record.task_category == category
+        and record.outcome == "success"
+        and record.model_id == rec.model_id
+        and record.effort == rec.effort
+        and record.execution_mode == rec.execution_mode
+    }
+
+
+def _experiment_id(
+    category: str,
+    kind: str,
+    primary: Recommendation,
+    challenger: Recommendation,
+) -> str:
+    raw = "|".join((category, kind, *_config_key(primary), *_config_key(challenger)))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _pair(
+    category: str,
+    kind: str,
+    primary: Recommendation,
+    challenger: Recommendation,
+    feedback: FeedbackStore,
+    priority: int,
+) -> dict[str, Any]:
+    primary_tasks = _successful_task_ids(feedback, category, primary)
+    challenger_tasks = _successful_task_ids(feedback, category, challenger)
+    shared = sorted(primary_tasks & challenger_tasks)
+    experiment_id = _experiment_id(category, kind, primary, challenger)
+    remaining = max(0, PAIRED_EFFICIENCY_MIN - len(shared))
+    if kind == "model":
+        rationale = (
+            "Compare the current best configuration with the strongest different model "
+            "on the same tasks."
+        )
+    else:
+        rationale = (
+            "Hold the model constant and compare the current configuration with its "
+            "next-best effort/execution alternative."
+        )
+    return {
+        "experiment_id": experiment_id,
+        "kind": kind,
+        "priority": priority,
+        "category": category,
+        "primary": primary.as_dict(),
+        "challenger": challenger.as_dict(),
+        "shared_successful_task_ids": shared,
+        "paired_tasks_observed": len(shared),
+        "paired_tasks_required": PAIRED_EFFICIENCY_MIN,
+        "paired_tasks_remaining": remaining,
+        "efficiency_ready": remaining == 0,
+        "task_id_template": f"{category}-{experiment_id}-task-{{nn}}",
+        "rationale": rationale,
+    }
+
+
+def build_experiment_plan(
+    profiles: dict[str, WorkloadProfile],
+    engine: RecommendationEngine,
+    providers: list[str] | None = None,
+    include_limited: bool = False,
+) -> dict[str, Any]:
+    """Build controlled A/B suggestions for each observed task category.
+
+    The planner never executes models. It proposes stable same-task comparison
+    pairs using the router's current ranking and counts already completed
+    successful pairs from the feedback store.
+    """
+    categories: list[dict[str, Any]] = []
+    ordered = sorted(
+        profiles.items(),
+        key=lambda item: (-item[1].activity_count, item[0]),
+    )
+
+    for category, workload in ordered:
+        recommendations = engine.recommend(
+            workload,
+            providers=providers,
+            include_limited=include_limited,
+            top_n=2,
+        )
+        if not recommendations:
+            continue
+        primary = recommendations[0]
+        pairs: list[dict[str, Any]] = []
+
+        if len(recommendations) > 1:
+            pairs.append(
+                _pair(
+                    category,
+                    "model",
+                    primary,
+                    recommendations[1],
+                    engine.feedback,
+                    priority=1,
+                )
+            )
+
+        model = _model_profile(engine, primary.model_id)
+        if model is not None:
+            same_model = _rank_same_model_configurations(
+                engine,
+                model,
+                workload,
+                category,
+            )
+            challenger = next(
+                (candidate for candidate in same_model if _config_key(candidate) != _config_key(primary)),
+                None,
+            )
+            if challenger is not None:
+                pairs.append(
+                    _pair(
+                        category,
+                        "configuration",
+                        primary,
+                        challenger,
+                        engine.feedback,
+                        priority=2,
+                    )
+                )
+
+        categories.append(
+            {
+                "category": category,
+                "activity_count": workload.activity_count,
+                "primary": primary.as_dict(),
+                "pairs": pairs,
+            }
+        )
+
+    return {
+        "paired_efficiency_threshold": PAIRED_EFFICIENCY_MIN,
+        "categories": categories,
+        "experiments": sum(len(item["pairs"]) for item in categories),
+        "ready_experiments": sum(
+            1
+            for item in categories
+            for pair in item["pairs"]
+            if pair["efficiency_ready"]
+        ),
+    }
+
+
+def experiment_plan_markdown(plan: dict[str, Any]) -> str:
+    lines = [
+        "# AI Model Advisor Experiment Plan",
+        "",
+        f"Proposed comparisons: **{plan['experiments']}**",
+        f"Already efficiency-ready: **{plan['ready_experiments']}**",
+        f"Paired-task threshold: **{plan['paired_efficiency_threshold']}**",
+        "",
+        (
+            "Use the same logical task ID for both sides of each comparison. The planner proposes "
+            "experiments only; it never executes a provider or writes feedback by itself."
+        ),
+        "",
+    ]
+
+    if not plan["categories"]:
+        lines.extend(["No recognized activity categories were available for experiment planning.", ""])
+        return "\n".join(lines)
+
+    for category in plan["categories"]:
+        lines.extend(
+            [
+                f"## {category['category']}",
+                "",
+                f"Current primary: **{_config_text_from_dict(category['primary'])}**",
+                "",
+            ]
+        )
+        for pair in sorted(category["pairs"], key=lambda item: item["priority"]):
+            primary = _config_text_from_dict(pair["primary"])
+            challenger = _config_text_from_dict(pair["challenger"])
+            lines.extend(
+                [
+                    f"### {pair['priority']}. {pair['kind']} comparison",
+                    "",
+                    f"- Experiment ID: `{pair['experiment_id']}`",
+                    f"- A: `{primary}`",
+                    f"- B: `{challenger}`",
+                    f"- Existing successful paired tasks: **{pair['paired_tasks_observed']}**",
+                    f"- Additional paired tasks needed: **{pair['paired_tasks_remaining']}**",
+                    f"- Shared task ID template: `{pair['task_id_template']}`",
+                    f"- Why: {pair['rationale']}",
+                    "",
+                ]
+            )
+
+    return "\n".join(lines)
+
+
+def _config_text_from_dict(rec: dict[str, Any]) -> str:
+    return f"{rec['model_id']} / {rec['effort']} / {rec['execution_mode']}"
