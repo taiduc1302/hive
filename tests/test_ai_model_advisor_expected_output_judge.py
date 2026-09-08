@@ -113,6 +113,27 @@ def test_cli_reads_expected_file_and_emits_schema_v1(tmp_path, monkeypatch, caps
     }
 
 
+def test_cli_can_use_environment_configuration_for_main_runner_compatibility(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    expected = tmp_path / "expected.json"
+    expected.write_text('{"ok": true}', encoding="utf-8")
+    monkeypatch.setenv("AI_MODEL_ADVISOR_EXPECTED_OUTPUT_FILE", str(expected))
+    monkeypatch.setenv("AI_MODEL_ADVISOR_EXPECTED_OUTPUT_MODE", "json-equal")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps(_payload('{"ok": true}'))),
+    )
+
+    assert main([]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["outcome"] == "success"
+    assert result["note"] == "JSON structural equality check passed"
+
+
 def test_cli_bad_expected_fixture_exits_nonzero(tmp_path, monkeypatch, capsys):
     expected = tmp_path / "expected.json"
     expected.write_text("not-json", encoding="utf-8")
