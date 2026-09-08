@@ -56,9 +56,13 @@ class Recommendation:
     confidence: float
     reasons: tuple[str, ...]
     tradeoffs: tuple[str, ...]
+    model_score: float = 0.0
+    configuration_adjustment: float = 0.0
     base_score: float = 0.0
     quality_adjustment: float = 0.0
     efficiency_adjustment: float = 0.0
+    preferred_effort: str = ""
+    preferred_execution_mode: str = ""
 
     @property
     def raw_empirical_adjustment(self) -> float:
