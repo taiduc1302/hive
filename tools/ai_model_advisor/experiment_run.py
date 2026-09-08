@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import time
@@ -8,7 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .feedback import FeedbackStore, UsageRecord
+from .feedback import EXACT_FEEDBACK_MIN, FeedbackStore, UsageRecord
 
 RunnerExecutor = Callable[[dict[str, Any]], dict[str, Any]]
 _VALID_OUTCOMES = {"success", "partial", "failure"}
@@ -30,6 +31,7 @@ class PairRunReport:
     category: str
     kind: str
     task_id: str
+    task_sha256: str
     order: tuple[str, str]
     records: tuple[UsageRecord, UsageRecord]
 
@@ -39,6 +41,7 @@ class PairRunReport:
             "category": self.category,
             "kind": self.kind,
             "task_id": self.task_id,
+            "task_sha256": self.task_sha256,
             "order": list(self.order),
             "records": [record.as_dict() for record in self.records],
         }
@@ -117,6 +120,70 @@ def _config_for_side(pair: dict[str, Any], side: str) -> dict[str, Any]:
     return {key: config[key] for key in _CONFIG_KEYS}
 
 
+def _record_matches_config(record: UsageRecord, config: dict[str, Any]) -> bool:
+    return (
+        record.provider == config["provider"]
+        and record.model_id == config["model_id"]
+        and record.effort == config["effort"]
+        and record.execution_mode == config["execution_mode"]
+    )
+
+
+def current_complete_pair_task_ids(
+    pair: dict[str, Any], feedback: FeedbackStore
+) -> tuple[str, ...]:
+    """Return unambiguous complete A/B task IDs from live feedback.
+
+    This intentionally recomputes progress instead of trusting the status
+    embedded in a saved plan, which may be stale after later benchmark runs.
+    """
+    prefix = _task_prefix(pair)
+    category = str(pair["category"])
+    primary = _config_for_side(pair, "A")
+    challenger = _config_for_side(pair, "B")
+    by_task: dict[str, dict[str, list[UsageRecord]]] = {}
+
+    for record in feedback.records:
+        if record.task_category != category or not record.task_id:
+            continue
+        if not record.task_id.startswith(prefix):
+            continue
+        side = None
+        if _record_matches_config(record, primary):
+            side = "A"
+        elif _record_matches_config(record, challenger):
+            side = "B"
+        if side is None:
+            continue
+        task = by_task.setdefault(record.task_id, {"A": [], "B": []})
+        task[side].append(record)
+
+    return tuple(
+        sorted(
+            task_id
+            for task_id, sides in by_task.items()
+            if len(sides["A"]) == 1 and len(sides["B"]) == 1
+        )
+    )
+
+
+def ensure_experiment_collectable(
+    pair: dict[str, Any], feedback: FeedbackStore, *, allow_ready: bool = False
+) -> tuple[str, ...]:
+    complete_task_ids = current_complete_pair_task_ids(pair, feedback)
+    ready = pair.get("status") == "ready" or len(complete_task_ids) >= EXACT_FEEDBACK_MIN
+    if ready and not allow_ready:
+        raise ExperimentRunnerError(
+            "Experiment is already ready for evaluation based on saved or live evidence; "
+            "use allow_ready only for deliberate extra evidence"
+        )
+    return complete_task_ids
+
+
+def task_sha256(task: str) -> str:
+    return hashlib.sha256(task.encode("utf-8")).hexdigest()
+
+
 def runner_payload(
     pair: dict[str, Any],
     experiment_id: str,
@@ -132,6 +199,7 @@ def runner_payload(
         "kind": pair["kind"],
         "task_id": task_id,
         "task": task,
+        "task_sha256": task_sha256(task),
         "configuration": _config_for_side(pair, side),
     }
 
@@ -232,10 +300,7 @@ def run_experiment_pair(
     allow_ready: bool = False,
 ) -> PairRunReport:
     pair = find_experiment(plan, experiment_id)
-    if pair.get("status") == "ready" and not allow_ready:
-        raise ExperimentRunnerError(
-            "Experiment is already ready for evaluation; use allow_ready only for deliberate extra evidence"
-        )
+    ensure_experiment_collectable(pair, feedback, allow_ready=allow_ready)
 
     if task_id is None:
         task_id, _ = next_task_id(pair, feedback)
@@ -273,6 +338,7 @@ def run_experiment_pair(
         category=str(pair["category"]),
         kind=str(pair["kind"]),
         task_id=task_id,
+        task_sha256=task_sha256(task),
         order=run_order,
         records=(staged["A"], staged["B"]),
     )
@@ -327,15 +393,24 @@ def command_executor(argv: Sequence[str], timeout_seconds: float) -> RunnerExecu
 def append_pair_feedback(path: str | Path, report: PairRunReport) -> None:
     """Append both validated sides only after the full pair completed.
 
-    This prevents adapter failures from creating one-sided benchmark evidence.
-    It intentionally does not claim cross-process file locking; concurrent
-    writers should be serialized by the caller.
+    A last-moment duplicate check narrows the race window between planning and
+    append. This is not a cross-process lock; concurrent benchmark writers
+    should still be serialized by the caller.
     """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    lines = [json.dumps(record.as_dict(), ensure_ascii=False) + "\n" for record in report.records]
+    existing = FeedbackStore.load(target)
+    source_ids = {record.source_id for record in report.records if record.source_id}
+    duplicates = source_ids & existing.source_ids
+    if duplicates:
+        raise ExperimentRunnerError(
+            "Benchmark source ID appeared before append: " + ", ".join(sorted(duplicates))
+        )
+    payload = "".join(
+        json.dumps(record.as_dict(), ensure_ascii=False) + "\n" for record in report.records
+    )
     with target.open("a", encoding="utf-8") as handle:
-        handle.writelines(lines)
+        handle.write(payload)
 
 
 def experiment_run_markdown(report: PairRunReport, *, applied: bool) -> str:
@@ -346,6 +421,7 @@ def experiment_run_markdown(report: PairRunReport, *, applied: bool) -> str:
         f"Category: **{report.category}**",
         f"Kind: **{report.kind}**",
         f"Task ID: `{report.task_id}`",
+        f"Task SHA-256: `{report.task_sha256}`",
         f"Execution order: **{' → '.join(report.order)}**",
         f"Feedback written: **{'yes' if applied else 'no'}**",
         "",
