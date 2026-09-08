@@ -115,10 +115,10 @@ def _outcome_from_detail(detail: dict[str, Any] | None) -> str | None:
         return None
     success = bool(detail.get("success"))
     exit_status = str(detail.get("exit_status") or "").lower()
-    if success and exit_status not in {"failure", "stalled", "guard_failure", "ghost_stream"}:
-        return "success"
     if exit_status in {"escalated", "paused"}:
         return "partial"
+    if success and exit_status not in {"failure", "stalled", "guard_failure", "ghost_stream"}:
+        return "success"
     if not success or exit_status in {"failure", "stalled", "guard_failure", "ghost_stream"}:
         return "failure"
     return None
