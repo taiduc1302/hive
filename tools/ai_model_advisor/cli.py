@@ -16,6 +16,7 @@ from .hive_trace import (
     import_report_markdown,
 )
 from .matrix import build_routing_matrix, routing_matrix_markdown
+from .readiness import build_experiment_readiness, experiment_readiness_markdown
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
 from .report import recommendation_markdown
@@ -140,6 +141,18 @@ def command_feedback_report(args: argparse.Namespace) -> int:
         print(markdown)
     if args.json_output:
         _write(args.json_output, json.dumps(audit, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
+def command_feedback_readiness(args: argparse.Namespace) -> int:
+    report = build_experiment_readiness(FeedbackStore.load(args.feedback))
+    markdown = experiment_readiness_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     return 0
 
 
@@ -280,6 +293,12 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_report.add_argument("--output", help="Optional Markdown evidence report")
     feedback_report.add_argument("--json-output")
     feedback_report.set_defaults(func=command_feedback_report)
+
+    feedback_readiness = sub.add_parser("feedback-readiness")
+    feedback_readiness.add_argument("--feedback", required=True)
+    feedback_readiness.add_argument("--output", help="Optional Markdown experiment-readiness plan")
+    feedback_readiness.add_argument("--json-output")
+    feedback_readiness.set_defaults(func=command_feedback_readiness)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
