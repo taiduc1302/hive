@@ -32,6 +32,29 @@ def _implementation_category(plan):
     return next(item for item in plan["categories"] if item["category"] == "implementation")
 
 
+def _pair_by_id(plan, experiment_id):
+    return next(
+        pair
+        for category in plan["categories"]
+        for pair in category["pairs"]
+        if pair["experiment_id"] == experiment_id
+    )
+
+
+def _record(side, task_id, outcome, *, category="implementation"):
+    return UsageRecord(
+        provider=side["provider"],
+        model_id=side["model_id"],
+        effort=side["effort"],
+        execution_mode=side["execution_mode"],
+        outcome=outcome,
+        latency_seconds=10,
+        cost_usd=0.10,
+        task_category=category,
+        task_id=task_id,
+    )
+
+
 def test_experiment_plan_isolates_model_effort_and_execution_pairs():
     plan = _plan()
     category = _implementation_category(plan)
@@ -55,6 +78,9 @@ def test_experiment_plan_isolates_model_effort_and_execution_pairs():
         != execution_pair["challenger"]["execution_mode"]
     )
 
+    assert plan["paired_quality_threshold"] == 3
+    assert plan["paired_efficiency_threshold"] == 3
+    assert all(pair["quality_paired_tasks_remaining"] == 3 for pair in by_kind.values())
     assert all(pair["paired_tasks_remaining"] == 3 for pair in by_kind.values())
     assert all(pair["status"] == "planned" for pair in by_kind.values())
     assert all(
@@ -84,7 +110,7 @@ def test_experiment_ids_are_deterministic_for_same_ranking():
     assert first_pairs == second_pairs
 
 
-def test_existing_shared_successful_task_reduces_remaining_pair_count():
+def test_existing_shared_successful_task_advances_quality_and_efficiency_progress():
     initial = _plan()
     pair = next(
         item
@@ -92,29 +118,18 @@ def test_existing_shared_successful_task_reduces_remaining_pair_count():
         if item["kind"] == "model"
     )
     task_id = pair["task_id_template"].format(nn="01")
-    records = []
-    for side in (pair["primary"], pair["challenger"]):
-        records.append(
-            UsageRecord(
-                provider=side["provider"],
-                model_id=side["model_id"],
-                effort=side["effort"],
-                execution_mode=side["execution_mode"],
-                outcome="success",
-                latency_seconds=10,
-                cost_usd=0.10,
-                task_category="implementation",
-                task_id=task_id,
-            )
-        )
+    records = [
+        _record(pair["primary"], task_id, "success"),
+        _record(pair["challenger"], task_id, "success"),
+    ]
 
     updated = _plan(FeedbackStore(records))
-    updated_pair = next(
-        item
-        for item in _implementation_category(updated)["pairs"]
-        if item["kind"] == "model"
-    )
+    updated_pair = _pair_by_id(updated, pair["experiment_id"])
+    assert updated_pair["complete_paired_task_ids"] == [task_id]
     assert updated_pair["shared_successful_task_ids"] == [task_id]
+    assert updated_pair["complete_paired_tasks_observed"] == 1
+    assert updated_pair["successful_paired_tasks_observed"] == 1
+    assert updated_pair["quality_paired_tasks_remaining"] == 2
     assert updated_pair["paired_tasks_observed"] == 1
     assert updated_pair["paired_tasks_remaining"] == 2
     assert updated_pair["efficiency_ready"] is False
@@ -126,6 +141,83 @@ def test_existing_shared_successful_task_reduces_remaining_pair_count():
     assert updated["collecting_experiments"] >= 1
 
 
+def test_complete_non_success_pairs_can_be_quality_ready_without_efficiency_ready():
+    initial = _plan()
+    pair = next(
+        item
+        for item in _implementation_category(initial)["pairs"]
+        if item["kind"] == "model"
+    )
+    records = []
+    for index in range(3):
+        task_id = pair["task_id_template"].format(nn=f"{index:02d}")
+        records.extend(
+            [
+                _record(pair["primary"], task_id, "partial"),
+                _record(pair["challenger"], task_id, "partial"),
+            ]
+        )
+
+    updated = _plan(FeedbackStore(records))
+    updated_pair = _pair_by_id(updated, pair["experiment_id"])
+    assert updated_pair["complete_paired_tasks_observed"] == 3
+    assert updated_pair["successful_paired_tasks_observed"] == 0
+    assert updated_pair["quality_ready"] is True
+    assert updated_pair["efficiency_ready"] is False
+    assert updated_pair["quality_paired_tasks_remaining"] == 0
+    assert updated_pair["paired_tasks_remaining"] == 3
+    assert updated_pair["status"] == "ready"
+    assert updated_pair["next_action"] == {
+        "type": "evaluate_saved_plan",
+        "paired_tasks_needed": 0,
+    }
+
+
+def test_same_category_same_configs_outside_experiment_prefix_do_not_count():
+    initial = _plan()
+    pair = next(
+        item
+        for item in _implementation_category(initial)["pairs"]
+        if item["kind"] == "model"
+    )
+    task_id = "implementation-unrelated-task-01"
+    records = [
+        _record(pair["primary"], task_id, "success"),
+        _record(pair["challenger"], task_id, "success"),
+    ]
+
+    updated = _plan(FeedbackStore(records))
+    updated_pair = _pair_by_id(updated, pair["experiment_id"])
+    assert updated_pair["complete_paired_tasks_observed"] == 0
+    assert updated_pair["successful_paired_tasks_observed"] == 0
+    assert updated_pair["status"] == "planned"
+
+
+def test_duplicate_attempt_is_ambiguous_and_not_counted_as_complete_pair():
+    initial = _plan()
+    pair = next(
+        item
+        for item in _implementation_category(initial)["pairs"]
+        if item["kind"] == "model"
+    )
+    task_id = pair["task_id_template"].format(nn="01")
+    records = [
+        _record(pair["primary"], task_id, "success"),
+        _record(pair["primary"], task_id, "success"),
+        _record(pair["challenger"], task_id, "success"),
+    ]
+
+    updated = _plan(FeedbackStore(records))
+    updated_pair = _pair_by_id(updated, pair["experiment_id"])
+    assert updated_pair["ambiguous_task_ids"] == [task_id]
+    assert updated_pair["complete_paired_tasks_observed"] == 0
+    assert updated_pair["status"] == "collecting"
+    assert updated_pair["next_action"] == {
+        "type": "collect_paired_tasks",
+        "paired_tasks_needed": 3,
+    }
+
+
 def test_success_in_different_category_does_not_count_as_shared_pair():
     initial = _plan()
     pair = next(
@@ -135,26 +227,12 @@ def test_success_in_different_category_does_not_count_as_shared_pair():
     )
     task_id = pair["task_id_template"].format(nn="01")
     records = [
-        UsageRecord(
-            provider=side["provider"],
-            model_id=side["model_id"],
-            effort=side["effort"],
-            execution_mode=side["execution_mode"],
-            outcome="success",
-            latency_seconds=10,
-            cost_usd=0.10,
-            task_category="research",
-            task_id=task_id,
-        )
-        for side in (pair["primary"], pair["challenger"])
+        _record(pair["primary"], task_id, "success", category="research"),
+        _record(pair["challenger"], task_id, "success", category="research"),
     ]
 
     updated = _plan(FeedbackStore(records))
-    updated_pair = next(
-        item
-        for item in _implementation_category(updated)["pairs"]
-        if item["kind"] == "model"
-    )
+    updated_pair = _pair_by_id(updated, pair["experiment_id"])
     assert updated_pair["paired_tasks_observed"] == 0
     assert updated_pair["paired_tasks_remaining"] == 3
     assert updated_pair["status"] == "planned"
