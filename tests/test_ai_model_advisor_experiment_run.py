@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -56,15 +57,17 @@ def _success_executor(payload):
 def test_runner_creates_exact_paired_records_from_saved_plan():
     plan = _plan()
     pair = _model_pair(plan)
+    task = "Implement the same endpoint from this fixed benchmark fixture."
     report = run_experiment_pair(
         plan,
         FeedbackStore(),
         pair["experiment_id"],
-        "Implement the same endpoint from this fixed benchmark fixture.",
+        task,
         _success_executor,
     )
 
     assert report.task_id.endswith("01")
+    assert report.task_sha256 == hashlib.sha256(task.encode("utf-8")).hexdigest()
     assert report.order == ("A", "B")
     assert len(report.records) == 2
     primary, challenger = report.records
@@ -192,6 +195,24 @@ def test_append_pair_feedback_writes_both_records_together(tmp_path):
     }
 
 
+def test_append_rechecks_duplicate_source_ids_at_write_time(tmp_path):
+    plan = _plan()
+    pair = _model_pair(plan)
+    report = run_experiment_pair(
+        plan,
+        FeedbackStore(),
+        pair["experiment_id"],
+        "fixed benchmark",
+        _success_executor,
+    )
+    feedback_path = tmp_path / "feedback.jsonl"
+    FeedbackStore.append(feedback_path, report.records[0])
+
+    with pytest.raises(ExperimentRunnerError, match="appeared before append"):
+        append_pair_feedback(feedback_path, report)
+    assert len(FeedbackStore.load(feedback_path).records) == 1
+
+
 def test_existing_benchmark_source_id_is_rejected():
     plan = _plan()
     pair = _model_pair(plan)
@@ -246,6 +267,33 @@ def test_ready_experiment_requires_explicit_override():
             store,
             pair["experiment_id"],
             "unnecessary extra benchmark",
+            _success_executor,
+        )
+
+
+def test_stale_saved_plan_stops_after_live_feedback_reaches_threshold():
+    stale_plan = _plan()
+    pair = _model_pair(stale_plan)
+    records = []
+    store = FeedbackStore()
+
+    for _ in range(3):
+        report = run_experiment_pair(
+            stale_plan,
+            store,
+            pair["experiment_id"],
+            "fixed benchmark",
+            _success_executor,
+        )
+        records.extend(report.records)
+        store = FeedbackStore(records)
+
+    with pytest.raises(ExperimentRunnerError, match="live evidence"):
+        run_experiment_pair(
+            stale_plan,
+            store,
+            pair["experiment_id"],
+            "fourth benchmark should be blocked",
             _success_executor,
         )
 
