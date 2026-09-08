@@ -33,13 +33,22 @@ def _implementation_pair(plan, kind="model"):
     return next(pair for pair in category["pairs"] if pair["kind"] == kind)
 
 
-def _record(side, task_id, outcome, *, latency=None, cost=None):
+def _record(
+    side,
+    task_id,
+    outcome,
+    *,
+    latency=None,
+    cost=None,
+    retries=0,
+):
     return UsageRecord(
         provider=side["provider"],
         model_id=side["model_id"],
         effort=side["effort"],
         execution_mode=side["execution_mode"],
         outcome=outcome,
+        retries=retries,
         latency_seconds=latency,
         cost_usd=cost,
         task_category="implementation",
@@ -53,7 +62,7 @@ def _result(report, experiment_id):
     )
 
 
-def test_experiment_evaluation_reports_insufficient_evidence_without_pairs():
+def test_experiment_evaluation_reports_planned_without_pairs():
     plan = _plan()
     pair = _implementation_pair(plan)
     report = evaluate_experiment_plan(plan, FeedbackStore())
@@ -63,7 +72,39 @@ def test_experiment_evaluation_reports_insufficient_evidence_without_pairs():
     assert result["decision"] == "insufficient_evidence"
     assert result["confidence"] == "insufficient"
     assert result["policy_ready"] is False
+    assert result["status"] == "planned"
     assert report["policy_ready_experiments"] == 0
+    assert report["status_counts"]["planned"] == report["experiments"]
+    assert report["evaluations"] == report["results"]
+
+
+def test_experiment_evaluation_marks_partial_collection_as_collecting():
+    plan = _plan()
+    pair = _implementation_pair(plan)
+    records = []
+    for index in range(2):
+        task_id = pair["task_id_template"].format(nn=f"{index:02d}")
+        records.extend(
+            [
+                _record(pair["primary"], task_id, "success", latency=10, cost=0.10),
+                _record(
+                    pair["challenger"],
+                    task_id,
+                    "success",
+                    latency=10,
+                    cost=0.10,
+                ),
+            ]
+        )
+
+    result = _result(
+        evaluate_experiment_plan(plan, FeedbackStore(records)),
+        pair["experiment_id"],
+    )
+    assert result["paired_tasks"] == 2
+    assert result["status"] == "collecting"
+    assert result["decision"] == "insufficient_evidence"
+    assert result["additional_paired_tasks_needed"] == 1
 
 
 def test_experiment_evaluation_prefers_outcome_quality_before_efficiency():
@@ -100,6 +141,7 @@ def test_experiment_evaluation_prefers_outcome_quality_before_efficiency():
     assert result["decision_basis"] == "outcome_quality"
     assert result["winner_side"] == "challenger"
     assert result["policy_ready"] is True
+    assert result["status"] == "decided"
     assert result["confidence"] in {"medium", "high"}
 
 
@@ -138,6 +180,45 @@ def test_experiment_evaluation_uses_efficiency_only_after_successful_quality_tie
     assert result["decision_basis"] == "paired_efficiency"
     assert result["winner_side"] == "primary"
     assert result["policy_ready"] is True
+    assert result["status"] == "decided"
+
+
+def test_conflicting_retry_and_efficiency_signals_become_tradeoff():
+    plan = _plan()
+    pair = _implementation_pair(plan)
+    records = []
+    for index in range(3):
+        task_id = pair["task_id_template"].format(nn=f"{index:02d}")
+        records.extend(
+            [
+                _record(
+                    pair["primary"],
+                    task_id,
+                    "success",
+                    latency=30,
+                    cost=0.30,
+                    retries=0,
+                ),
+                _record(
+                    pair["challenger"],
+                    task_id,
+                    "success",
+                    latency=10,
+                    cost=0.10,
+                    retries=1,
+                ),
+            ]
+        )
+
+    result = _result(
+        evaluate_experiment_plan(plan, FeedbackStore(records)),
+        pair["experiment_id"],
+    )
+    assert result["retry_leader"] == "A"
+    assert result["weighted_efficiency_leader"] == "B"
+    assert result["decision"] == "tradeoff"
+    assert result["status"] == "tradeoff"
+    assert result["winner_side"] is None
 
 
 def test_experiment_evaluation_ignores_same_configs_outside_experiment_prefix():
@@ -164,6 +245,7 @@ def test_experiment_evaluation_ignores_same_configs_outside_experiment_prefix():
 
     assert result["paired_tasks"] == 0
     assert result["decision"] == "insufficient_evidence"
+    assert result["status"] == "planned"
 
 
 def test_experiment_evaluation_markdown_disclaims_statistical_probability():
@@ -173,3 +255,4 @@ def test_experiment_evaluation_markdown_disclaims_statistical_probability():
 
     assert "not a statistical probability" in markdown
     assert "Experiment details" in markdown
+    assert "Planned:" in markdown
