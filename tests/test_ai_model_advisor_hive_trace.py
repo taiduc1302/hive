@@ -200,3 +200,28 @@ def test_hive_trace_controlled_import_can_stamp_config_and_task_id(tmp_path):
     assert record.task_id == "benchmark-1"
     assert record.effort == "medium"
     assert record.execution_mode == "single"
+
+
+def test_filtered_node_does_not_inherit_multi_node_execution_success(tmp_path):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _turn("exec-7", "node-a", "openai/gpt-5.6-terra", 0.1),
+            _turn("exec-7", "node-b", "openai/gpt-5.6-terra", 0.1),
+            {
+                "type": "execution_completed",
+                "stream_id": "queen",
+                "node_id": None,
+                "execution_id": "exec-7",
+                "data": {},
+            },
+        ],
+    )
+    report = import_hive_trace(
+        events,
+        ModelRegistry(REGISTRY),
+        node_id="node-a",
+    )
+    assert report.records == ()
+    assert report.skipped_unknown_outcomes == 1
