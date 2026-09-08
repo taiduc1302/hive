@@ -34,10 +34,13 @@ python -m tools.ai_model_advisor.cli experiment-plan \
 
 The command accepts the same explicit activity sources as the rest of the Advisor (`--input`, `--chatgpt-export`, or `--github-user`) plus optional provider filters.
 
-For each recognized task category it proposes up to two controlled comparison lines:
+For each recognized task category it proposes up to three controlled comparison lines:
 
 1. **Model comparison** — the current best configuration against the strongest current configuration from a different model.
-2. **Configuration comparison** — the current best configuration against the next-best effort/execution configuration of the same model.
+2. **Effort comparison** — the same model and execution mode, changing only reasoning effort.
+3. **Execution comparison** — the same model and reasoning effort, changing only execution/orchestration mode.
+
+The two same-model experiments deliberately change one variable at a time. This avoids attributing a result to `high` reasoning when the challenger also changed from `single` to `subagents`, or attributing a gain to orchestration when reasoning effort changed at the same time.
 
 Each pair contains:
 
