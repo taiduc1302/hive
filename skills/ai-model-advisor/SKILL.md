@@ -1,6 +1,6 @@
 ---
 name: ai-model-advisor
-description: Track current AI models, reasoning effort, coding-agent and orchestration changes, then recommend the best configuration for a user's real workload and repeated outcomes. Use when choosing ChatGPT/OpenAI/Codex or Claude/Claude Code model/mode, comparing high/xhigh/max/ultracode-style modes, reviewing recent AI releases, analyzing GitHub or explicit ChatGPT activity, importing Hive execution telemetry for model feedback, comparing repeated task cost/latency, or preparing a recurring model-selection review.
+description: Track current AI models, reasoning effort, coding-agent and orchestration changes, then recommend the best configuration for a user's real workload and repeated outcomes. Use when choosing ChatGPT/OpenAI/Codex or Claude/Claude Code model/mode, comparing high/xhigh/max/ultracode-style modes, reviewing recent AI releases, analyzing GitHub or explicit ChatGPT activity, importing Hive execution telemetry for model feedback, auditing learned model preferences, comparing repeated task cost/latency, or preparing a recurring model-selection review.
 ---
 
 # AI Model Advisor
@@ -33,6 +33,8 @@ For one Hive session, use `feedback-import-hive` against the session `events.jso
 
 For a Hive storage root, use `feedback-import-hive-root`. Treat it as preview-only unless `--apply` is explicitly requested. Discover only canonical `.../sessions/<session_id>/events.jsonl` traces; do not ingest nested worker-local event logs as separate sessions.
 
+After importing history, use `feedback-report` before changing routing defaults. Check observation counts, S/P/F split, retry/cost/latency coverage, exact/cross-config eligibility, paired comparable tasks, and the actual quality/efficiency deltas. If the report cannot explain a non-zero empirical adjustment, do not trust that personalization signal until the discrepancy is resolved.
+
 For controlled A/B comparisons, assign the same stable `task_id` to repeated attempts of the same task and record the exact effort/execution mode. Compare cost/latency only across successful attempts of that same task and category. Never reward a failed attempt merely because it was fast or cheap.
 
 ## 6. Return an actionable recommendation
@@ -43,4 +45,4 @@ When empirical history materially changes the ranking, say whether the evidence 
 
 ## 7. Recurring review
 
-For ongoing monitoring, check official provider docs/release notes, compare material changes with the previous review, inspect only explicitly available activity/telemetry, and change defaults only when evidence supports it. Preserve prior source fingerprints so temporary provider-page failures do not create false change alerts.
+For ongoing monitoring, check official provider docs/release notes, compare material changes with the previous review, inspect only explicitly available activity/telemetry, run the feedback audit when personalization is active, and change defaults only when evidence supports it. Preserve prior source fingerprints so temporary provider-page failures do not create false change alerts.
