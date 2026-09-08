@@ -98,6 +98,18 @@ def _runtime_details_by_node(rows: tuple[dict[str, Any], ...]) -> dict[str, list
     return result
 
 
+def _execution_llm_group_counts(rows: tuple[dict[str, Any], ...]) -> dict[str, int]:
+    nodes: dict[str, set[str]] = defaultdict(set)
+    for event in rows:
+        if event.get("type") != "llm_turn_complete":
+            continue
+        execution_id = str(event.get("execution_id") or "")
+        node_id = str(event.get("node_id") or "")
+        if execution_id and node_id:
+            nodes[execution_id].add(node_id)
+    return {execution_id: len(node_ids) for execution_id, node_ids in nodes.items()}
+
+
 def _outcome_from_detail(detail: dict[str, Any] | None) -> str | None:
     if not detail:
         return None
@@ -129,7 +141,7 @@ def _outcome_from_events(group: _TraceGroup, execution_group_count: int) -> str 
         return "failure"
 
     # Execution-level terminal events do not name a node. They are safe to
-    # attribute only when this execution contains exactly one LLM node.
+    # attribute only when the FULL execution contains exactly one LLM node.
     if execution_group_count == 1:
         types = {str(event.get("type") or "") for event in group.events}
         if "execution_completed" in types:
@@ -199,10 +211,8 @@ def import_hive_trace(
     events_read = _read_jsonl(events_path)
     details_read = _read_jsonl(details_path)
     details_by_node = _runtime_details_by_node(details_read.rows)
+    execution_group_counts = _execution_llm_group_counts(events_read.rows)
     groups = _groups_from_events(events_read.rows, node_id)
-    groups_per_execution: dict[str, int] = defaultdict(int)
-    for group in groups:
-        groups_per_execution[group.execution_id] += 1
 
     records: list[UsageRecord] = []
     mixed_models = 0
@@ -240,7 +250,10 @@ def import_hive_trace(
 
         outcome = _outcome_from_detail(detail)
         if outcome is None:
-            outcome = _outcome_from_events(group, groups_per_execution[group.execution_id])
+            outcome = _outcome_from_events(
+                group,
+                execution_group_counts.get(group.execution_id, 0),
+            )
         if outcome is None:
             unknown_outcomes += 1
             continue
