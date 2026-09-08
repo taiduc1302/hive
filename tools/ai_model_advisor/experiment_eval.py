@@ -347,6 +347,7 @@ def _evaluate_pair(
         decision,
     )
     policy_ready = paired_tasks >= required_pairs
+    remaining = max(0, required_pairs - paired_tasks)
     if paired_tasks == 0:
         status = "planned"
     elif paired_tasks < required_pairs:
@@ -358,11 +359,34 @@ def _evaluate_pair(
     else:
         status = "ready"
 
+    if status in {"planned", "collecting"}:
+        next_action = {
+            "type": "collect_paired_tasks",
+            "paired_tasks_needed": remaining,
+        }
+    elif status == "decided":
+        next_action = {
+            "type": "review_winner_and_rerun_router",
+            "paired_tasks_needed": 0,
+            "winner_side": winner_side,
+        }
+    elif status == "tradeoff":
+        next_action = {
+            "type": "review_tradeoff_or_collect_more",
+            "paired_tasks_needed": 1,
+        }
+    else:
+        next_action = {
+            "type": "review_tie_or_collect_more",
+            "paired_tasks_needed": 1,
+        }
+
     return {
         "experiment_id": pair["experiment_id"],
         "kind": pair["kind"],
         "priority": pair.get("priority"),
         "status": status,
+        "next_action": next_action,
         "category": category,
         "task_id_prefix": prefix,
         "primary": primary,
@@ -371,7 +395,7 @@ def _evaluate_pair(
         "paired_tasks": paired_tasks,
         "paired_tasks_required": required_pairs,
         "required_paired_tasks": required_pairs,
-        "additional_paired_tasks_needed": max(0, required_pairs - paired_tasks),
+        "additional_paired_tasks_needed": remaining,
         "ambiguous_task_ids": ambiguous_task_ids,
         "incomplete_task_ids": incomplete_task_ids,
         "primary_records": len(primary_records),
@@ -494,11 +518,16 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
 
     lines.extend(["", "## Experiment details", ""])
     for result in results:
+        action = result["next_action"]
+        action_text = action["type"].replace("_", " ")
+        if action.get("paired_tasks_needed"):
+            action_text += f" ({action['paired_tasks_needed']} paired task(s))"
         lines.extend(
             [
                 f"### {result['category']} / {result['kind']} / {result['experiment_id']}",
                 "",
                 f"- Status: **{result['status']}**",
+                f"- Next action: **{action_text}**",
                 f"- A: `{_config_text(result['primary'])}`",
                 f"- B: `{_config_text(result['challenger'])}`",
                 f"- Task ID prefix: `{result['task_id_prefix']}`",
