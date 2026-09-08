@@ -57,6 +57,11 @@ def test_experiment_plan_isolates_model_effort_and_execution_pairs():
 
     assert all(pair["paired_tasks_remaining"] == 3 for pair in by_kind.values())
     assert all(pair["status"] == "planned" for pair in by_kind.values())
+    assert all(
+        pair["next_action"]
+        == {"type": "collect_paired_tasks", "paired_tasks_needed": 3}
+        for pair in by_kind.values()
+    )
     assert plan["planned_experiments"] == plan["experiments"]
     assert plan["collecting_experiments"] == 0
     assert plan["ready_experiments"] == 0
@@ -114,6 +119,10 @@ def test_existing_shared_successful_task_reduces_remaining_pair_count():
     assert updated_pair["paired_tasks_remaining"] == 2
     assert updated_pair["efficiency_ready"] is False
     assert updated_pair["status"] == "collecting"
+    assert updated_pair["next_action"] == {
+        "type": "collect_paired_tasks",
+        "paired_tasks_needed": 2,
+    }
     assert updated["collecting_experiments"] >= 1
 
 
