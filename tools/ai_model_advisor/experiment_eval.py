@@ -162,7 +162,21 @@ def _evaluate_pair(
     challenger = pair["challenger"]
     primary_by_task = _records_by_task(feedback, category, primary, prefix)
     challenger_by_task = _records_by_task(feedback, category, challenger, prefix)
-    shared_task_ids = sorted(set(primary_by_task) & set(challenger_by_task))
+
+    all_task_ids = sorted(set(primary_by_task) | set(challenger_by_task))
+    shared_task_ids: list[str] = []
+    ambiguous_task_ids: list[str] = []
+    incomplete_task_ids: list[str] = []
+    for task_id in all_task_ids:
+        primary_records = primary_by_task.get(task_id, [])
+        challenger_records = challenger_by_task.get(task_id, [])
+        if len(primary_records) > 1 or len(challenger_records) > 1:
+            ambiguous_task_ids.append(task_id)
+            continue
+        if len(primary_records) != 1 or len(challenger_records) != 1:
+            incomplete_task_ids.append(task_id)
+            continue
+        shared_task_ids.append(task_id)
 
     primary_quality = [
         _task_quality(primary_by_task[task_id]) for task_id in shared_task_ids
@@ -254,6 +268,8 @@ def _evaluate_pair(
         "paired_tasks": paired_tasks,
         "paired_tasks_required": required_pairs,
         "additional_paired_tasks_needed": max(0, required_pairs - paired_tasks),
+        "ambiguous_task_ids": ambiguous_task_ids,
+        "incomplete_task_ids": incomplete_task_ids,
         "primary_records": sum(len(records) for records in primary_by_task.values()),
         "challenger_records": sum(len(records) for records in challenger_by_task.values()),
         "primary_quality_score": primary_quality_score,
@@ -355,6 +371,8 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
                 f"- B: `{_config_text(result['challenger'])}`",
                 f"- Task ID prefix: `{result['task_id_prefix']}`",
                 f"- Paired tasks: **{result['paired_tasks']}**",
+                f"- Ambiguous duplicate tasks excluded: **{len(result['ambiguous_task_ids'])}**",
+                f"- Incomplete one-sided tasks: **{len(result['incomplete_task_ids'])}**",
                 (
                     "- Quality wins A/B/tie: "
                     f"**{result['primary_quality_wins']}/"
