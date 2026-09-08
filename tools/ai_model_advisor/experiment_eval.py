@@ -347,11 +347,22 @@ def _evaluate_pair(
         decision,
     )
     policy_ready = paired_tasks >= required_pairs
+    if paired_tasks == 0:
+        status = "planned"
+    elif paired_tasks < required_pairs:
+        status = "collecting"
+    elif decision in {"primary_leads", "challenger_leads"}:
+        status = "decided"
+    elif decision == "tradeoff":
+        status = "tradeoff"
+    else:
+        status = "ready"
 
     return {
         "experiment_id": pair["experiment_id"],
         "kind": pair["kind"],
         "priority": pair.get("priority"),
+        "status": status,
         "category": category,
         "task_id_prefix": prefix,
         "primary": primary,
@@ -415,6 +426,10 @@ def evaluate_experiment_plan(
         for result in ready
         if result["decision"] in {"primary_leads", "challenger_leads"}
     ]
+    status_counts = {
+        status: sum(result["status"] == status for result in results)
+        for status in ("planned", "collecting", "ready", "decided", "tradeoff")
+    }
     return {
         "paired_task_threshold": PAIRED_EFFICIENCY_MIN,
         "experiments": len(results),
@@ -422,6 +437,7 @@ def evaluate_experiment_plan(
         "policy_ready_experiments": len(ready),
         "decided_experiments": len(decided),
         "unresolved_experiments": len(results) - len(decided),
+        "status_counts": status_counts,
         "confidence_note": (
             "confidence_score is a heuristic evidence-strength indicator, "
             "not a statistical probability or p-value"
@@ -433,13 +449,16 @@ def evaluate_experiment_plan(
 
 def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
     results = report.get("results") or report.get("evaluations") or []
+    status_counts = report.get("status_counts") or {}
     lines = [
         "# AI Model Advisor Experiment Evaluation",
         "",
         f"Experiments evaluated: **{report['experiments']}**",
-        f"Policy-ready: **{report['policy_ready_experiments']}**",
-        f"Decided: **{report['decided_experiments']}**",
-        f"Unresolved: **{report['unresolved_experiments']}**",
+        f"Planned: **{status_counts.get('planned', 0)}**",
+        f"Collecting: **{status_counts.get('collecting', 0)}**",
+        f"Ready/no winner: **{status_counts.get('ready', 0)}**",
+        f"Decided: **{status_counts.get('decided', 0)}**",
+        f"Trade-off: **{status_counts.get('tradeoff', 0)}**",
         f"Minimum paired tasks: **{report['paired_task_threshold']}**",
         "",
         f"Note: {report['confidence_note']}.",
@@ -457,8 +476,8 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
 
     lines.extend(
         [
-            "| Category | Kind | Paired | Quality A/B | Efficiency pairs | Decision | Confidence | Ready |",
-            "|---|---|---:|---|---:|---|---|---|",
+            "| Category | Kind | Status | Paired | Quality A/B | Efficiency pairs | Decision | Confidence |",
+            "|---|---|---|---:|---|---:|---|---|",
         ]
     )
     for result in results:
@@ -466,11 +485,11 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
             f"{result['primary_quality_score']:.3f}/"
             f"{result['challenger_quality_score']:.3f}"
         )
-        ready = "yes" if result["policy_ready"] else "no"
         lines.append(
-            f"| {result['category']} | {result['kind']} | {result['paired_tasks']} | "
-            f"{quality} | {result['efficiency_paired_tasks']} | {result['decision']} | "
-            f"{result['confidence']} ({result['confidence_score']:.2f}) | {ready} |"
+            f"| {result['category']} | {result['kind']} | {result['status']} | "
+            f"{result['paired_tasks']} | {quality} | {result['efficiency_paired_tasks']} | "
+            f"{result['decision']} | {result['confidence']} "
+            f"({result['confidence_score']:.2f}) |"
         )
 
     lines.extend(["", "## Experiment details", ""])
@@ -479,6 +498,7 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
             [
                 f"### {result['category']} / {result['kind']} / {result['experiment_id']}",
                 "",
+                f"- Status: **{result['status']}**",
                 f"- A: `{_config_text(result['primary'])}`",
                 f"- B: `{_config_text(result['challenger'])}`",
                 f"- Task ID prefix: `{result['task_id_prefix']}`",
