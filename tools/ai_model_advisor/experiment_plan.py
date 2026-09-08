@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+from collections import defaultdict
 from typing import Any
 
-from .feedback import PAIRED_EFFICIENCY_MIN, FeedbackStore
+from .feedback import (
+    EXACT_FEEDBACK_MIN,
+    PAIRED_EFFICIENCY_MIN,
+    FeedbackStore,
+    UsageRecord,
+)
 from .models import ModelProfile, Recommendation, WorkloadProfile
 from .recommend import RecommendationEngine
 
@@ -50,21 +56,26 @@ def _rank_same_model_configurations(
     return rows
 
 
-def _successful_task_ids(
+def _records_by_task(
     feedback: FeedbackStore,
     category: str,
     rec: Recommendation,
-) -> set[str]:
-    return {
-        record.task_id
-        for record in feedback.records
-        if record.task_id
-        and record.task_category == category
-        and record.outcome == "success"
-        and record.model_id == rec.model_id
-        and record.effort == rec.effort
-        and record.execution_mode == rec.execution_mode
-    }
+    task_prefix: str,
+) -> dict[str, list[UsageRecord]]:
+    grouped: dict[str, list[UsageRecord]] = defaultdict(list)
+    for record in feedback.records:
+        if not record.task_id or not record.task_id.startswith(task_prefix):
+            continue
+        if record.task_category != category:
+            continue
+        if record.model_id != rec.model_id:
+            continue
+        if record.effort != rec.effort:
+            continue
+        if record.execution_mode != rec.execution_mode:
+            continue
+        grouped[record.task_id].append(record)
+    return dict(grouped)
 
 
 def _experiment_id(
@@ -85,14 +96,38 @@ def _pair(
     feedback: FeedbackStore,
     priority: int,
 ) -> dict[str, Any]:
-    primary_tasks = _successful_task_ids(feedback, category, primary)
-    challenger_tasks = _successful_task_ids(feedback, category, challenger)
-    shared = sorted(primary_tasks & challenger_tasks)
     experiment_id = _experiment_id(category, kind, primary, challenger)
-    remaining = max(0, PAIRED_EFFICIENCY_MIN - len(shared))
-    if not shared:
+    task_prefix = f"{category}-{experiment_id}-task-"
+    primary_by_task = _records_by_task(feedback, category, primary, task_prefix)
+    challenger_by_task = _records_by_task(feedback, category, challenger, task_prefix)
+
+    complete: list[str] = []
+    successful: list[str] = []
+    ambiguous: list[str] = []
+    incomplete: list[str] = []
+    all_task_ids = sorted(set(primary_by_task) | set(challenger_by_task))
+    for task_id in all_task_ids:
+        primary_records = primary_by_task.get(task_id, [])
+        challenger_records = challenger_by_task.get(task_id, [])
+        if len(primary_records) > 1 or len(challenger_records) > 1:
+            ambiguous.append(task_id)
+            continue
+        if len(primary_records) != 1 or len(challenger_records) != 1:
+            incomplete.append(task_id)
+            continue
+        complete.append(task_id)
+        if (
+            primary_records[0].outcome == "success"
+            and challenger_records[0].outcome == "success"
+        ):
+            successful.append(task_id)
+
+    quality_remaining = max(0, EXACT_FEEDBACK_MIN - len(complete))
+    efficiency_remaining = max(0, PAIRED_EFFICIENCY_MIN - len(successful))
+    has_any_observation = bool(all_task_ids)
+    if not has_any_observation:
         status = "planned"
-    elif remaining > 0:
+    elif quality_remaining > 0:
         status = "collecting"
     else:
         status = "ready"
@@ -100,7 +135,7 @@ def _pair(
     if status in {"planned", "collecting"}:
         next_action = {
             "type": "collect_paired_tasks",
-            "paired_tasks_needed": remaining,
+            "paired_tasks_needed": quality_remaining,
         }
     else:
         next_action = {
@@ -132,12 +167,21 @@ def _pair(
         "category": category,
         "primary": primary.as_dict(),
         "challenger": challenger.as_dict(),
-        "shared_successful_task_ids": shared,
-        "paired_tasks_observed": len(shared),
+        "complete_paired_task_ids": complete,
+        "shared_successful_task_ids": successful,
+        "ambiguous_task_ids": ambiguous,
+        "incomplete_task_ids": incomplete,
+        "complete_paired_tasks_observed": len(complete),
+        "successful_paired_tasks_observed": len(successful),
+        "quality_paired_tasks_required": EXACT_FEEDBACK_MIN,
+        "quality_paired_tasks_remaining": quality_remaining,
+        "quality_ready": quality_remaining == 0,
+        # Backward-compatible efficiency aliases retained for existing consumers.
+        "paired_tasks_observed": len(successful),
         "paired_tasks_required": PAIRED_EFFICIENCY_MIN,
-        "paired_tasks_remaining": remaining,
-        "efficiency_ready": remaining == 0,
-        "task_id_template": f"{category}-{experiment_id}-task-{{nn}}",
+        "paired_tasks_remaining": efficiency_remaining,
+        "efficiency_ready": efficiency_remaining == 0,
+        "task_id_template": f"{task_prefix}{{nn}}",
         "rationale": rationale,
     }
 
@@ -152,8 +196,8 @@ def build_experiment_plan(
 
     The planner never executes models. It proposes stable same-task comparison
     pairs using the router's current ranking and counts already completed
-    successful pairs from the feedback store. Same-model experiments isolate
-    one variable at a time: reasoning effort or execution mode.
+    paired tasks from the feedback store. Same-model experiments isolate one
+    variable at a time: reasoning effort or execution mode.
     """
     categories: list[dict[str, Any]] = []
     ordered = sorted(
@@ -247,6 +291,7 @@ def build_experiment_plan(
 
     all_pairs = [pair for item in categories for pair in item["pairs"]]
     return {
+        "paired_quality_threshold": EXACT_FEEDBACK_MIN,
         "paired_efficiency_threshold": PAIRED_EFFICIENCY_MIN,
         "categories": categories,
         "experiments": len(all_pairs),
@@ -266,7 +311,8 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
         f"Planned: **{plan.get('planned_experiments', 0)}**",
         f"Collecting: **{plan.get('collecting_experiments', 0)}**",
         f"Ready for evaluation: **{plan['ready_experiments']}**",
-        f"Paired-task threshold: **{plan['paired_efficiency_threshold']}**",
+        f"Complete-pair quality threshold: **{plan['paired_quality_threshold']}**",
+        f"Successful-pair efficiency threshold: **{plan['paired_efficiency_threshold']}**",
         "",
         (
             "Use the same logical task ID for both sides of each comparison. The planner proposes "
@@ -293,7 +339,7 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
             challenger = _config_text_from_dict(pair["challenger"])
             action = pair["next_action"]
             if action["type"] == "collect_paired_tasks":
-                action_text = f"collect {action['paired_tasks_needed']} more paired task(s)"
+                action_text = f"collect {action['paired_tasks_needed']} more complete paired task(s)"
             else:
                 action_text = "evaluate the saved plan"
             lines.extend(
@@ -305,8 +351,23 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
                     f"- Experiment ID: `{pair['experiment_id']}`",
                     f"- A: `{primary}`",
                     f"- B: `{challenger}`",
-                    f"- Existing successful paired tasks: **{pair['paired_tasks_observed']}**",
-                    f"- Additional paired tasks needed: **{pair['paired_tasks_remaining']}**",
+                    f"- Complete paired tasks: **{pair['complete_paired_tasks_observed']}**",
+                    (
+                        "- Successful paired tasks usable for efficiency: "
+                        f"**{pair['successful_paired_tasks_observed']}**"
+                    ),
+                    (
+                        "- Additional complete pairs needed for quality/evaluation: "
+                        f"**{pair['quality_paired_tasks_remaining']}**"
+                    ),
+                    (
+                        "- Additional successful pairs needed for efficiency: "
+                        f"**{pair['paired_tasks_remaining']}**"
+                    ),
+                    (
+                        "- Ambiguous/incomplete task IDs: "
+                        f"**{len(pair['ambiguous_task_ids'])}/{len(pair['incomplete_task_ids'])}**"
+                    ),
                     f"- Shared task ID template: `{pair['task_id_template']}`",
                     f"- Why: {pair['rationale']}",
                     "",
