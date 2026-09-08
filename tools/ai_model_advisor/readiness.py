@@ -183,7 +183,11 @@ def experiment_readiness_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "Historical `observed / hive_agent_loop` rows can strengthen model-level confidence after the conservative fallback threshold, but they cannot prove which reasoning effort or orchestration mode caused the result.",
+            (
+                "Historical `observed / hive_agent_loop` rows can strengthen model-level confidence "
+                "after the conservative fallback threshold, but they cannot prove which reasoning "
+                "effort or orchestration mode caused the result."
+            ),
             "",
         ]
     )
