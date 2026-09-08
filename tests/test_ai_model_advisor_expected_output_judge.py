@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -102,7 +102,7 @@ def test_cli_reads_expected_file_and_emits_schema_v1(tmp_path, monkeypatch, caps
     expected = tmp_path / "expected.txt"
     expected.write_text("answer\n", encoding="utf-8")
     payload = json.dumps(_payload("answer"))
-    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(payload))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
 
     assert main(["--mode", "strip-exact", "--expected-file", str(expected)]) == 0
     result = json.loads(capsys.readouterr().out)
@@ -119,7 +119,7 @@ def test_cli_bad_expected_fixture_exits_nonzero(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         sys,
         "stdin",
-        __import__("io").StringIO(json.dumps(_payload('{"ok": true}'))),
+        io.StringIO(json.dumps(_payload('{"ok": true}'))),
     )
 
     assert main(["--mode", "json-equal", "--expected-file", str(expected)]) == 2
