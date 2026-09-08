@@ -12,10 +12,6 @@ def _config_key(rec: Recommendation) -> tuple[str, str, str]:
     return rec.model_id, rec.effort, rec.execution_mode
 
 
-def _config_text(rec: Recommendation) -> str:
-    return f"{rec.model_id} / {rec.effort} / {rec.execution_mode}"
-
-
 def _model_profile(engine: RecommendationEngine, model_id: str) -> ModelProfile | None:
     matches = [model for model in engine.registry.models if model.model_id == model_id]
     return matches[0] if len(matches) == 1 else None
@@ -99,11 +95,16 @@ def _pair(
             "Compare the current best configuration with the strongest different model "
             "on the same tasks."
         )
-    else:
+    elif kind == "effort":
         rationale = (
-            "Hold the model constant and compare the current configuration with its "
-            "next-best effort/execution alternative."
+            "Hold model and execution mode constant so the comparison isolates reasoning effort."
         )
+    elif kind == "execution":
+        rationale = (
+            "Hold model and reasoning effort constant so the comparison isolates execution mode."
+        )
+    else:
+        raise ValueError(f"Unsupported experiment kind: {kind}")
     return {
         "experiment_id": experiment_id,
         "kind": kind,
@@ -131,7 +132,8 @@ def build_experiment_plan(
 
     The planner never executes models. It proposes stable same-task comparison
     pairs using the router's current ranking and counts already completed
-    successful pairs from the feedback store.
+    successful pairs from the feedback store. Same-model experiments isolate
+    one variable at a time: reasoning effort or execution mode.
     """
     categories: list[dict[str, Any]] = []
     ordered = sorted(
@@ -171,19 +173,45 @@ def build_experiment_plan(
                 workload,
                 category,
             )
-            challenger = next(
-                (candidate for candidate in same_model if _config_key(candidate) != _config_key(primary)),
+            effort_challenger = next(
+                (
+                    candidate
+                    for candidate in same_model
+                    if candidate.execution_mode == primary.execution_mode
+                    and candidate.effort != primary.effort
+                ),
                 None,
             )
-            if challenger is not None:
+            if effort_challenger is not None:
                 pairs.append(
                     _pair(
                         category,
-                        "configuration",
+                        "effort",
                         primary,
-                        challenger,
+                        effort_challenger,
                         engine.feedback,
                         priority=2,
+                    )
+                )
+
+            execution_challenger = next(
+                (
+                    candidate
+                    for candidate in same_model
+                    if candidate.effort == primary.effort
+                    and candidate.execution_mode != primary.execution_mode
+                ),
+                None,
+            )
+            if execution_challenger is not None:
+                pairs.append(
+                    _pair(
+                        category,
+                        "execution",
+                        primary,
+                        execution_challenger,
+                        engine.feedback,
+                        priority=3,
                     )
                 )
 
