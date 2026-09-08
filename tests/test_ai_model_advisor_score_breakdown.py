@@ -41,14 +41,22 @@ def test_recommendation_exposes_applied_empirical_score_breakdown():
 
     assert result.quality_adjustment > 0
     assert result.efficiency_adjustment == 0
+    assert round(result.model_score + result.configuration_adjustment, 2) == result.base_score
     assert round(result.base_score + result.empirical_adjustment, 2) == result.score
     payload = result.as_dict()
+    assert payload["model_score"] == result.model_score
+    assert payload["configuration_adjustment"] == result.configuration_adjustment
     assert payload["base_score"] == result.base_score
     assert payload["quality_adjustment"] == result.quality_adjustment
     assert payload["efficiency_adjustment"] == result.efficiency_adjustment
     assert payload["empirical_adjustment"] == result.empirical_adjustment
     assert payload["raw_empirical_adjustment"] == result.raw_empirical_adjustment
+    assert payload["preferred_effort"] == result.preferred_effort
+    assert payload["preferred_execution_mode"] == result.preferred_execution_mode
 
     markdown = recommendation_markdown(workload, [result], registry.as_of)
     assert "Score breakdown" in markdown
+    assert "model fit" in markdown
+    assert "configuration prior" in markdown
+    assert "static base" in markdown
     assert "applied empirical" in markdown
