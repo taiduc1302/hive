@@ -228,6 +228,17 @@ def _anthropic_normalized_usage(usage: dict[str, Any]) -> tuple[int | None, int 
     return total_input, cache_read, cache_creation
 
 
+def _verify_openai_effort_echo(request: ProviderRequest, response: dict[str, Any]) -> None:
+    reasoning = response.get("reasoning")
+    if not isinstance(reasoning, dict):
+        return
+    applied_effort = reasoning.get("effort")
+    if isinstance(applied_effort, str) and applied_effort != request.configuration["effort"]:
+        raise ProviderAdapterError(
+            "OpenAI response reasoning.effort does not match the saved experiment configuration"
+        )
+
+
 def parse_provider_response(
     request: ProviderRequest,
     response: dict[str, Any],
@@ -239,6 +250,7 @@ def parse_provider_response(
         status = response.get("status")
         if status == "failed":
             raise ProviderAdapterError("OpenAI response status is failed")
+        _verify_openai_effort_echo(request, response)
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
         input_details = (
             usage.get("input_tokens_details")
