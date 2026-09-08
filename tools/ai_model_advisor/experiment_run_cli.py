@@ -9,6 +9,7 @@ from .experiment_run import (
     ExperimentRunnerError,
     append_pair_feedback,
     command_executor,
+    ensure_experiment_collectable,
     execution_order,
     experiment_run_markdown,
     find_experiment,
@@ -16,8 +17,9 @@ from .experiment_run import (
     pair_run_json,
     run_experiment_pair,
     runner_payload,
+    task_sha256,
 )
-from .feedback import FeedbackStore
+from .feedback import EXACT_FEEDBACK_MIN, FeedbackStore
 
 
 def _load_json_object(path: str | Path) -> dict[str, Any]:
@@ -52,10 +54,11 @@ def build_preview(
     allow_ready: bool = False,
 ) -> dict[str, Any]:
     pair = find_experiment(plan, experiment_id)
-    if pair.get("status") == "ready" and not allow_ready:
-        raise ExperimentRunnerError(
-            "Experiment is already ready for evaluation; use --allow-ready only for deliberate extra evidence"
-        )
+    complete_task_ids = ensure_experiment_collectable(
+        pair,
+        feedback,
+        allow_ready=allow_ready,
+    )
     if task_id is None:
         task_id, _ = next_task_id(pair, feedback)
     run_order = execution_order(pair, task_id, order)
@@ -77,8 +80,12 @@ def build_preview(
         "experiment_id": experiment_id,
         "category": pair["category"],
         "kind": pair["kind"],
-        "status": pair.get("status"),
+        "saved_status": pair.get("status"),
+        "live_complete_pair_task_ids": list(complete_task_ids),
+        "live_complete_pairs": len(complete_task_ids),
+        "quality_threshold": EXACT_FEEDBACK_MIN,
         "task_id": task_id,
+        "task_sha256": task_sha256(task),
         "order": list(run_order),
         "source_ids": source_ids,
         "payloads": payloads,
@@ -94,8 +101,13 @@ def preview_markdown(preview: dict[str, Any]) -> str:
         f"Experiment: `{preview['experiment_id']}`",
         f"Category: **{preview['category']}**",
         f"Kind: **{preview['kind']}**",
-        f"Saved status: **{preview.get('status') or 'unknown'}**",
+        f"Saved status: **{preview.get('saved_status') or 'unknown'}**",
+        (
+            f"Live complete A/B pairs: **{preview['live_complete_pairs']} / "
+            f"{preview['quality_threshold']}**"
+        ),
         f"Task ID: `{preview['task_id']}`",
+        f"Task SHA-256: `{preview['task_sha256']}`",
         f"Execution order: **{' → '.join(preview['order'])}**",
         "",
         "## Exact configurations",
@@ -112,7 +124,8 @@ def preview_markdown(preview: dict[str, Any]) -> str:
             "",
             (
                 "Run again with `--apply --runner ...` only after confirming that the adapter "
-                "can honor every configuration field shown above."
+                "can honor every configuration field shown above. The adapter must echo the "
+                "actual applied configuration in its result."
             ),
             "",
         ]
@@ -134,7 +147,10 @@ def _write_json(path: str | None, payload: dict[str, Any]) -> None:
         return
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    target.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -171,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
         nargs=argparse.REMAINDER,
         help=(
             "Adapter executable argv. It receives one JSON object on stdin and must print a JSON "
-            "result object as its last non-empty stdout line. Required only with --apply."
+            "result object as its last non-empty stdout line. Required only with --apply. "
+            "Place --runner last so following tokens belong to the adapter."
         ),
     )
     return parser
@@ -200,9 +217,22 @@ def main(argv: list[str] | None = None) -> int:
     runner_argv = list(args.runner or [])
     if not runner_argv:
         raise ExperimentRunnerError("--runner is required when --apply is used")
+
+    # Reload immediately before spending provider credits so a previous run or
+    # another writer that completed after the initial preview is noticed.
+    live_feedback = FeedbackStore.load(args.feedback)
+    build_preview(
+        plan,
+        live_feedback,
+        args.experiment_id,
+        task,
+        task_id=preview["task_id"],
+        order=args.order,
+        allow_ready=args.allow_ready,
+    )
     report = run_experiment_pair(
         plan,
-        feedback,
+        live_feedback,
         args.experiment_id,
         task,
         command_executor(runner_argv, args.timeout_seconds),
