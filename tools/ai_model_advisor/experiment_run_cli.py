@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .expected_output_judge import ExpectedOutputJudgeError, judge_expected_output
 from .experiment_judge import OutcomeJudge, apply_outcome_judge, command_judge
 from .experiment_run import (
     ExperimentRunnerError,
     RunnerExecutor,
+    RunnerInfrastructureError,
     append_pair_feedback,
     command_executor,
     ensure_experiment_collectable,
@@ -61,6 +63,26 @@ def _with_outcome_judge(executor: RunnerExecutor, judge: OutcomeJudge | None) ->
         return apply_outcome_judge(payload, adapter_result, judge)
 
     return execute
+
+
+def _expected_output_judge(path: str | Path, mode: str) -> OutcomeJudge:
+    try:
+        expected = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ExperimentRunnerError(f"could not read expected-output fixture: {exc}") from exc
+    if mode == "json-equal":
+        try:
+            json.loads(expected)
+        except json.JSONDecodeError as exc:
+            raise ExperimentRunnerError("expected-output JSON fixture is invalid") from exc
+
+    def judge(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return judge_expected_output(payload, expected=expected, mode=mode)
+        except ExpectedOutputJudgeError as exc:
+            raise RunnerInfrastructureError(f"expected-output judge failed: {exc}") from exc
+
+    return judge
 
 
 def build_preview(
@@ -213,6 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", help="Optional Markdown report")
     parser.add_argument("--json-output")
     parser.add_argument(
+        "--expected-output-file",
+        help="Built-in deterministic expected-output fixture; mutually exclusive with --judge",
+    )
+    parser.add_argument(
+        "--expected-output-mode",
+        choices=["exact", "strip-exact", "contains", "json-equal"],
+        default="strip-exact",
+    )
+    parser.add_argument(
         "--judge",
         nargs="+",
         help=(
@@ -234,6 +265,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.judge and args.expected_output_file:
+        raise ExperimentRunnerError("use either --judge or --expected-output-file, not both")
+
     plan = _load_json_object(args.plan)
     feedback = FeedbackStore.load(args.feedback)
     task = _task_text(args)
@@ -256,7 +290,13 @@ def main(argv: list[str] | None = None) -> int:
     if not runner_argv:
         raise ExperimentRunnerError("--runner is required when --apply is used")
 
-    judge = command_judge(args.judge, args.judge_timeout_seconds) if args.judge else None
+    if args.expected_output_file:
+        judge = _expected_output_judge(
+            args.expected_output_file,
+            args.expected_output_mode,
+        )
+    else:
+        judge = command_judge(args.judge, args.judge_timeout_seconds) if args.judge else None
     executor = _with_outcome_judge(
         command_executor(runner_argv, args.timeout_seconds),
         judge,
