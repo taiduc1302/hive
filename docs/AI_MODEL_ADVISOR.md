@@ -37,6 +37,7 @@ python -m tools.ai_model_advisor.cli matrix --input tools/ai_model_advisor/sampl
 python -m tools.ai_model_advisor.cli matrix --chatgpt-export /path/to/conversations.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personal-routing.md
 python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personalized.md
 python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0 --latency-seconds 42 --cost-usd 0.31 --task-category implementation --task-id api-endpoint-17
+python -m tools.ai_model_advisor.cli feedback-report --feedback ~/.hive/model-feedback.jsonl --output /tmp/feedback-audit.md --json-output /tmp/feedback-audit.json
 python -m tools.ai_model_advisor.cli feedback-import-hive --events /path/to/session/events.jsonl --details /path/to/session/logs/details.jsonl --feedback ~/.hive/model-feedback.jsonl --task-category repo_review --output /tmp/hive-feedback-import.md
 python -m tools.ai_model_advisor.cli feedback-import-hive-root --root ~/.hive --feedback ~/.hive/model-feedback.jsonl --output /tmp/hive-history-preview.md
 python -m tools.ai_model_advisor.cli feedback-import-hive-root --root ~/.hive --feedback ~/.hive/model-feedback.jsonl --apply --output /tmp/hive-history-import.md
@@ -114,6 +115,23 @@ reports discovered sessions, eligible observations, mixed/unknown-model skips, a
 Bulk observations namespace their idempotency key with the session ID (`hive:<session_id>:<execution_id>:<node_id>`), so even reused execution IDs across different sessions cannot collide. Repeating `--apply` on the same history therefore does not duplicate evidence.
 
 Bulk history is intentionally imported as `effort=observed` and `execution=hive_agent_loop` unless explicitly overridden. It is suitable for conservative model-level outcome learning. Use the single-session/node importer with explicit `task_id`, effort, and execution mode when building controlled paired efficiency evidence.
+
+### Feedback evidence audit
+
+Run `feedback-report` after importing history and before changing routing defaults. It turns the raw JSONL store into an auditable Markdown/JSON report grouped by task category, model, effort, and execution mode.
+
+For every configuration the report shows:
+
+- observation count and success/partial/failure split;
+- average retries;
+- latency/cost sample coverage and medians;
+- unique task IDs and importer source IDs;
+- whether the 3-observation exact quality threshold has been reached;
+- whether the 6-observation same-model cross-config fallback threshold has been reached;
+- number of paired comparable task IDs and whether paired efficiency is eligible;
+- the actual quality and efficiency score adjustments currently attributable to that evidence.
+
+If the feedback store is empty, the report explicitly states that the static registry is driving recommendations. Rows below threshold remain visible as historical evidence but do not independently change routing. This makes every non-zero empirical adjustment traceable to a concrete evidence bucket instead of allowing personalization to become a hidden self-reinforcing signal.
 
 ### Paired cost and latency evidence
 
