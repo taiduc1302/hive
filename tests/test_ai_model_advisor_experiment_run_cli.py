@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from tools.ai_model_advisor.activity import ActivityAnalyzer
+from tools.ai_model_advisor.cli import build_parser as build_main_parser
 from tools.ai_model_advisor.experiment_plan import build_experiment_plan
 from tools.ai_model_advisor.experiment_run import RunnerInfrastructureError
 from tools.ai_model_advisor.experiment_run_cli import main
@@ -63,6 +64,31 @@ def test_cli_preview_does_not_require_or_launch_runner(tmp_path):
     assert preview["order"] == ["A", "B"]
     assert preview["payloads"]["A"]["configuration"]["model_id"] == pair["primary"]["model_id"]
     assert "No executable was launched" in output.read_text(encoding="utf-8")
+
+
+def test_main_cli_alias_runs_preview_without_adapter(tmp_path):
+    plan_path, pair = _write_plan(tmp_path)
+    feedback = tmp_path / "feedback.jsonl"
+    output = tmp_path / "main-preview.md"
+    args = build_main_parser().parse_args(
+        [
+            "experiment-run",
+            "--plan",
+            str(plan_path),
+            "--experiment-id",
+            pair["experiment_id"],
+            "--feedback",
+            str(feedback),
+            "--task",
+            "Implement the fixed benchmark endpoint.",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert args.func(args) == 0
+    assert not feedback.exists()
+    assert "Experiment Run Preview" in output.read_text(encoding="utf-8")
 
 
 def test_cli_apply_runs_adapter_and_appends_exact_pair(tmp_path):
