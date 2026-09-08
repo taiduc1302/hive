@@ -56,9 +56,12 @@ def recommendation_markdown(
                 f"- Model: `{rec.model_id}`",
                 f"- Effort: **{rec.effort}**",
                 f"- Execution: **{rec.execution_mode}**",
+                f"- Static preferred config: **{rec.preferred_effort} / {rec.preferred_execution_mode}**",
                 f"- Score: **{rec.score:.2f}**",
                 (
-                    f"- Score breakdown: base **{rec.base_score:.2f}**; "
+                    f"- Score breakdown: model fit **{rec.model_score:.2f}**; "
+                    f"configuration prior **{rec.configuration_adjustment:+.3f}**; "
+                    f"static base **{rec.base_score:.2f}**; "
                     f"applied empirical **{rec.empirical_adjustment:+.3f}** "
                     f"(quality {rec.quality_adjustment:+.3f}, "
                     f"efficiency {rec.efficiency_adjustment:+.3f})"
@@ -82,8 +85,9 @@ def recommendation_markdown(
             "",
             (
                 "Do not automatically choose the largest model. Move up in model/effort only when recent tasks "
-                "show more ambiguity, breadth, autonomy, or error cost. Use workflow/multi-agent modes only when "
-                "the work is genuinely parallelizable or too large for one context."
+                "show more ambiguity, breadth, autonomy, error cost, or repeated exact evidence. The router now "
+                "scores all allowed effort/execution configurations within each model, but the static workload "
+                "prior penalizes unnecessary deviation until empirical history justifies it."
             ),
             "",
             "## Privacy boundary",
