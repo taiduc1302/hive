@@ -67,6 +67,11 @@ def test_feedback_audit_surfaces_paired_efficiency_evidence():
                     outcome="success",
                     latency_seconds=10,
                     cost_usd=0.10,
+                    input_tokens=1000,
+                    output_tokens=200,
+                    cached_tokens=500,
+                    cache_creation_tokens=50,
+                    credits=1.25,
                     task_category="implementation",
                     task_id=task_id,
                     source_id=f"terra-{index}",
@@ -79,6 +84,10 @@ def test_feedback_audit_surfaces_paired_efficiency_evidence():
                     outcome="success",
                     latency_seconds=20,
                     cost_usd=0.20,
+                    input_tokens=1200,
+                    output_tokens=240,
+                    cached_tokens=300,
+                    cache_creation_tokens=80,
                     task_category="implementation",
                     task_id=task_id,
                     source_id=f"sonnet-{index}",
@@ -96,7 +105,18 @@ def test_feedback_audit_surfaces_paired_efficiency_evidence():
     assert sonnet["efficiency_adjustment"] < 0
     assert terra["median_latency_seconds"] == 10.0
     assert terra["median_cost_usd"] == 0.1
+    assert terra["median_input_tokens"] == 1000.0
+    assert terra["median_output_tokens"] == 200.0
+    assert terra["median_cache_read_ratio"] == 0.5
+    assert terra["median_cache_creation_tokens"] == 50.0
+    assert terra["median_credits"] == 1.25
+    assert terra["credit_samples"] == 3
+    assert sonnet["credit_samples"] == 0
 
     markdown = feedback_audit_markdown(audit)
     assert "Evidence by configuration" in markdown
     assert "gpt-5.6-terra" in markdown
+    assert "median tokens in/out 1000/200" in markdown
+    assert "median cache-read 50.0%" in markdown
+    assert "median Hive credits 1.2500" in markdown
+    assert "diagnostic-only" in markdown
