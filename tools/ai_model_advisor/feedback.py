@@ -24,6 +24,7 @@ class UsageRecord:
     cost_usd: float | None = None
     task_category: str | None = None
     task_id: str | None = None
+    source_id: str | None = None
     note: str = ""
 
     def __post_init__(self) -> None:
@@ -54,6 +55,9 @@ class FeedbackStore:
     ``task_id`` was successfully attempted by the candidate configuration and
     at least one alternative configuration. This paired comparison prevents a
     quick small task from being treated as evidence against a slower large one.
+
+    ``source_id`` is metadata only. Importers use it as an idempotency key so
+    re-reading the same trace does not duplicate evidence.
     """
 
     def __init__(self, records: Iterable[UsageRecord] = ()) -> None:
@@ -85,6 +89,10 @@ class FeedbackStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record.as_dict(), ensure_ascii=False) + "\n")
+
+    @property
+    def source_ids(self) -> frozenset[str]:
+        return frozenset(record.source_id for record in self.records if record.source_id)
 
     def matching(
         self,
