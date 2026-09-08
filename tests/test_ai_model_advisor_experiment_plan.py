@@ -20,11 +20,11 @@ def _profiles():
     )
 
 
-def _plan(feedback=FeedbackStore()):
+def _plan(feedback=None):
     registry = ModelRegistry(REGISTRY)
     return build_experiment_plan(
         _profiles(),
-        RecommendationEngine(registry, feedback),
+        RecommendationEngine(registry, feedback or FeedbackStore()),
     )
 
 
