@@ -56,6 +56,15 @@ class Recommendation:
     confidence: float
     reasons: tuple[str, ...]
     tradeoffs: tuple[str, ...]
+    base_score: float = 0.0
+    quality_adjustment: float = 0.0
+    efficiency_adjustment: float = 0.0
+
+    @property
+    def empirical_adjustment(self) -> float:
+        return round(self.quality_adjustment + self.efficiency_adjustment, 3)
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["empirical_adjustment"] = self.empirical_adjustment
+        return payload
