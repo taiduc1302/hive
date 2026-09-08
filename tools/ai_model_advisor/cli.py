@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .activity import ActivityAnalyzer
+from .experiment_plan import build_experiment_plan, experiment_plan_markdown
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
@@ -105,6 +106,24 @@ def command_matrix(args: argparse.Namespace) -> int:
     _write(args.output, routing_matrix_markdown(rows, registry.as_of))
     if args.json_output:
         payload = {"registry_as_of": registry.as_of, "routing_matrix": rows}
+        _write(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
+def command_experiment_plan(args: argparse.Namespace) -> int:
+    analyzer = ActivityAnalyzer()
+    profiles = analyzer.category_profiles_from_texts(_activity_texts(args, analyzer))
+    registry = ModelRegistry(args.registry)
+    feedback = FeedbackStore.load(args.feedback)
+    plan = build_experiment_plan(
+        profiles,
+        RecommendationEngine(registry, feedback),
+        providers=args.provider or None,
+        include_limited=args.include_limited,
+    )
+    _write(args.output, experiment_plan_markdown(plan))
+    if args.json_output:
+        payload = {"registry_as_of": registry.as_of, **plan}
         _write(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return 0
 
@@ -264,6 +283,16 @@ def build_parser() -> argparse.ArgumentParser:
     matrix.add_argument("--output", required=True)
     matrix.add_argument("--json-output")
     matrix.set_defaults(func=command_matrix)
+
+    experiment_plan = sub.add_parser("experiment-plan")
+    _add_activity_source_arguments(experiment_plan)
+    experiment_plan.add_argument("--registry")
+    experiment_plan.add_argument("--provider", action="append", choices=["openai", "anthropic"])
+    experiment_plan.add_argument("--include-limited", action="store_true")
+    experiment_plan.add_argument("--feedback")
+    experiment_plan.add_argument("--output", required=True)
+    experiment_plan.add_argument("--json-output")
+    experiment_plan.set_defaults(func=command_experiment_plan)
 
     feedback = sub.add_parser("feedback-add")
     feedback.add_argument("--feedback", required=True)
