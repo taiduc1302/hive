@@ -36,7 +36,7 @@ python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --ou
 python -m tools.ai_model_advisor.cli matrix --input tools/ai_model_advisor/sample_activity.json --output /tmp/routing-matrix.md --json-output /tmp/routing-matrix.json
 python -m tools.ai_model_advisor.cli matrix --chatgpt-export /path/to/conversations.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personal-routing.md
 python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personalized.md
-python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0 --task-category implementation
+python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0 --latency-seconds 42 --cost-usd 0.31 --task-category implementation --task-id api-endpoint-17
 python -m tools.ai_model_advisor.cli scan --baseline /tmp/source-baseline.json --write-baseline /tmp/source-baseline.json --output /tmp/source-scan.md --json-output /tmp/source-scan.json
 ```
 
@@ -48,13 +48,30 @@ The Markdown output includes the primary model/effort/execution configuration pl
 
 ## Personal feedback policy
 
-Feedback is JSONL and stays local unless the user deliberately commits/uploads it. A record can include outcome (`success`, `partial`, `failure`), retries, latency, cost, task category, and a note.
+Feedback is JSONL and stays local unless the user deliberately commits/uploads it. A record can include outcome (`success`, `partial`, `failure`), retries, latency, cost, task category, a stable task ID, and a note.
 
-The router does **not** react to one-off anecdotes. Fewer than three matching observations have zero scoring effect. Larger samples are shrunk toward neutral and capped so empirical history tunes the registry instead of replacing it.
+The router does **not** react to one-off anecdotes. Fewer than three matching outcome observations have zero scoring effect. Larger samples are shrunk toward neutral and capped so empirical history tunes the registry instead of replacing it.
 
 When feedback has a `task_category`, it is scoped to that type of work. For example, repeated success on `repo_review` can improve a model's score for future repository reviews but does not raise that model's score for `implementation`. Older untagged feedback remains a conservative fallback for backward compatibility.
 
 The router chooses the dominant category from the current workload profile before applying personal evidence. This keeps personalization task-aware rather than turning a generally successful model into the default for every job.
+
+### Paired cost and latency evidence
+
+Absolute elapsed time and spend are **not** compared across unrelated tasks. A five-second one-line fix is not evidence that a configuration is more efficient than a thirty-minute repository audit.
+
+To make cost/latency actionable, give multiple attempts of the same task the same `task_id`. Efficiency evidence is used only when:
+
+- the candidate configuration successfully completed the task;
+- at least one different model/effort/execution configuration successfully completed that same `task_id`;
+- the records are in the same named `task_category` when a category is present;
+- at least three comparable task IDs exist before the aggregate efficiency score can affect routing.
+
+For each shared task ID, the router compares the candidate's median latency/cost with the median of successful peer configurations. Relative differences are capped per task, then shrunk by sample count. The resulting efficiency adjustment is smaller than the outcome-quality adjustment and is also bounded inside the total empirical score.
+
+Failed fast attempts never receive an efficiency reward. Unpaired latency/cost records remain useful historical data but have zero routing effect until a comparable peer run exists.
+
+This design intentionally favors repeated A/B-style evidence over anecdotal absolute numbers.
 
 ## Recommendation dimensions
 
