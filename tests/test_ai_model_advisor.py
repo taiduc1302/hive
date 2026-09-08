@@ -148,6 +148,56 @@ def test_category_feedback_falls_back_to_legacy_untagged_records():
     ) > 0
 
 
+def test_sparse_cross_config_feedback_does_not_transfer():
+    feedback = FeedbackStore(
+        [
+            UsageRecord(
+                provider="anthropic",
+                model_id="claude-opus-5",
+                effort="high",
+                execution_mode="single",
+                outcome="success",
+                task_category="repo_review",
+            )
+            for _ in range(4)
+        ]
+    )
+    assert (
+        feedback.adjustment(
+            "claude-opus-5",
+            "medium",
+            "single",
+            "repo_review",
+        )
+        == 0
+    )
+
+
+def test_dense_cross_config_feedback_can_transfer_conservatively():
+    feedback = FeedbackStore(
+        [
+            UsageRecord(
+                provider="anthropic",
+                model_id="claude-opus-5",
+                effort="high",
+                execution_mode="single",
+                outcome="success",
+                task_category="repo_review",
+            )
+            for _ in range(6)
+        ]
+    )
+    assert (
+        feedback.adjustment(
+            "claude-opus-5",
+            "medium",
+            "single",
+            "repo_review",
+        )
+        > 0
+    )
+
+
 def test_feedback_jsonl_round_trip(tmp_path):
     path = tmp_path / "feedback.jsonl"
     record = UsageRecord(
