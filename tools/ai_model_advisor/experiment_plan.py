@@ -290,7 +290,12 @@ def build_experiment_plan(
         )
 
     all_pairs = [pair for item in categories for pair in item["pairs"]]
+    provider_scope = list(providers) if providers else None
     return {
+        "routing_scope": {
+            "providers": provider_scope,
+            "include_limited": bool(include_limited),
+        },
         "paired_quality_threshold": EXACT_FEEDBACK_MIN,
         "paired_efficiency_threshold": PAIRED_EFFICIENCY_MIN,
         "categories": categories,
@@ -304,9 +309,14 @@ def build_experiment_plan(
 
 
 def experiment_plan_markdown(plan: dict[str, Any]) -> str:
+    routing_scope = plan.get("routing_scope") or {}
+    providers = routing_scope.get("providers")
+    provider_text = ", ".join(providers) if providers else "all active providers"
+    limited_text = "included" if routing_scope.get("include_limited") else "excluded"
     lines = [
         "# AI Model Advisor Experiment Plan",
         "",
+        f"Routing scope: **{provider_text}**; limited models **{limited_text}**",
         f"Proposed comparisons: **{plan['experiments']}**",
         f"Planned: **{plan.get('planned_experiments', 0)}**",
         f"Collecting: **{plan.get('collecting_experiments', 0)}**",
