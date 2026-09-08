@@ -101,6 +101,14 @@ jobs:
             --output model-advisor-output/experiment-plan.md \
             --json-output model-advisor-output/experiment-plan.json
 
+      - name: Smoke-test controlled experiment evaluator
+        run: |
+          python -m tools.ai_model_advisor.cli experiment-evaluate \
+            --plan model-advisor-output/experiment-plan.json \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/experiment-evaluation-smoke.md \
+            --json-output model-advisor-output/experiment-evaluation-smoke.json
+
       - name: Smoke-test feedback evidence commands
         run: |
           python -m tools.ai_model_advisor.cli feedback-report \
