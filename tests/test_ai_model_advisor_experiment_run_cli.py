@@ -37,6 +37,7 @@ def test_cli_preview_does_not_require_or_launch_runner(tmp_path):
     feedback = tmp_path / "feedback.jsonl"
     output = tmp_path / "preview.md"
     json_output = tmp_path / "preview.json"
+    benchmark = "Implement the fixed benchmark endpoint with PRIVATE_FIXTURE_42."
 
     assert (
         main(
@@ -48,7 +49,7 @@ def test_cli_preview_does_not_require_or_launch_runner(tmp_path):
                 "--feedback",
                 str(feedback),
                 "--task",
-                "Implement the fixed benchmark endpoint.",
+                benchmark,
                 "--output",
                 str(output),
                 "--json-output",
@@ -59,11 +60,19 @@ def test_cli_preview_does_not_require_or_launch_runner(tmp_path):
     )
 
     assert not feedback.exists()
-    preview = json.loads(json_output.read_text(encoding="utf-8"))
+    preview_text = json_output.read_text(encoding="utf-8")
+    preview = json.loads(preview_text)
+    markdown = output.read_text(encoding="utf-8")
     assert preview["mode"] == "preview"
     assert preview["order"] == ["A", "B"]
+    assert preview["task_text_included"] is False
+    assert "task" not in preview["payloads"]["A"]
+    assert "task" not in preview["payloads"]["B"]
+    assert benchmark not in preview_text
+    assert "PRIVATE_FIXTURE_42" not in markdown
     assert preview["payloads"]["A"]["configuration"]["model_id"] == pair["primary"]["model_id"]
-    assert "No executable was launched" in output.read_text(encoding="utf-8")
+    assert "No executable was launched" in markdown
+    assert "intentionally omitted" in markdown
 
 
 def test_main_cli_alias_runs_preview_without_adapter(tmp_path):
