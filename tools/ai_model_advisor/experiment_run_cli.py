@@ -43,6 +43,11 @@ def _task_text(args: argparse.Namespace) -> str:
     return task
 
 
+def _redacted_preview_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return audit metadata without persisting the benchmark prompt itself."""
+    return {key: value for key, value in payload.items() if key != "task"}
+
+
 def build_preview(
     plan: dict[str, Any],
     feedback: FeedbackStore,
@@ -63,7 +68,9 @@ def build_preview(
         task_id, _ = next_task_id(pair, feedback)
     run_order = execution_order(pair, task_id, order)
     payloads = {
-        side: runner_payload(pair, experiment_id, side, task_id, task)
+        side: _redacted_preview_payload(
+            runner_payload(pair, experiment_id, side, task_id, task)
+        )
         for side in ("A", "B")
     }
     source_ids = [
@@ -86,6 +93,7 @@ def build_preview(
         "quality_threshold": EXACT_FEEDBACK_MIN,
         "task_id": task_id,
         "task_sha256": task_sha256(task),
+        "task_text_included": False,
         "order": list(run_order),
         "source_ids": source_ids,
         "payloads": payloads,
@@ -97,6 +105,7 @@ def preview_markdown(preview: dict[str, Any]) -> str:
         "# AI Model Advisor Experiment Run Preview",
         "",
         "No executable was launched and no feedback was written.",
+        "Benchmark task text is intentionally omitted from preview artifacts; only its SHA-256 is retained.",
         "",
         f"Experiment: `{preview['experiment_id']}`",
         f"Category: **{preview['category']}**",
