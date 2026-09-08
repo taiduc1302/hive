@@ -56,10 +56,22 @@ def recommendation_markdown(
                 f"- Model: `{rec.model_id}`",
                 f"- Effort: **{rec.effort}**",
                 f"- Execution: **{rec.execution_mode}**",
+                f"- Score: **{rec.score:.2f}**",
+                (
+                    f"- Score breakdown: base **{rec.base_score:.2f}**; "
+                    f"applied empirical **{rec.empirical_adjustment:+.3f}** "
+                    f"(quality {rec.quality_adjustment:+.3f}, "
+                    f"efficiency {rec.efficiency_adjustment:+.3f})"
+                ),
                 f"- Confidence: **{rec.confidence:.0%}**",
                 "- Why: " + "; ".join(rec.reasons),
             ]
         )
+        if rec.raw_empirical_adjustment != rec.empirical_adjustment:
+            lines.append(
+                f"- Empirical cap: raw {rec.raw_empirical_adjustment:+.3f} was capped to "
+                f"{rec.empirical_adjustment:+.3f} before ranking"
+            )
         if rec.tradeoffs:
             lines.append("- Trade-offs: " + "; ".join(rec.tradeoffs))
         lines.append("")
