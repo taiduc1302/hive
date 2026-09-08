@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .activity import ActivityAnalyzer
 from .feedback import FeedbackStore, UsageRecord
+from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
 from .hive_trace import (
     append_imported_feedback,
@@ -122,6 +123,18 @@ def command_feedback_add(args: argparse.Namespace) -> int:
         note=args.note or "",
     )
     FeedbackStore.append(args.feedback, record)
+    return 0
+
+
+def command_feedback_report(args: argparse.Namespace) -> int:
+    audit = build_feedback_audit(FeedbackStore.load(args.feedback))
+    markdown = feedback_audit_markdown(audit)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(audit, ensure_ascii=False, indent=2) + "\n")
     return 0
 
 
@@ -251,6 +264,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     feedback.add_argument("--note")
     feedback.set_defaults(func=command_feedback_add)
+
+    feedback_report = sub.add_parser("feedback-report")
+    feedback_report.add_argument("--feedback", required=True)
+    feedback_report.add_argument("--output", help="Optional Markdown evidence report")
+    feedback_report.add_argument("--json-output")
+    feedback_report.set_defaults(func=command_feedback_report)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
