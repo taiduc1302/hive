@@ -72,7 +72,7 @@ def test_cli_apply_runs_adapter_and_appends_exact_pair(tmp_path):
     json_output = tmp_path / "run.json"
     adapter = tmp_path / "adapter.py"
     adapter.write_text(
-        """import json, sys\npayload = json.load(sys.stdin)\nside = payload['side']\nprint(json.dumps({'outcome': 'success', 'retries': 0, 'cost_usd': 0.1 if side == 'A' else 0.2, 'input_tokens': 100, 'output_tokens': 20}))\n""",
+        """import json, sys\npayload = json.load(sys.stdin)\nside = payload['side']\nprint(json.dumps({'schema_version': 1, 'applied_configuration': payload['configuration'], 'outcome': 'success', 'retries': 0, 'cost_usd': 0.1 if side == 'A' else 0.2, 'input_tokens': 100, 'output_tokens': 20}))\n""",
         encoding="utf-8",
     )
 
