@@ -8,8 +8,9 @@ from pathlib import Path
 from statistics import median
 
 _OUTCOME_VALUE = {"success": 1.0, "partial": 0.5, "failure": 0.0}
-_EXACT_MIN = 3
-_CROSS_CONFIG_MIN = 6
+EXACT_FEEDBACK_MIN = 3
+CROSS_CONFIG_FEEDBACK_MIN = 6
+PAIRED_EFFICIENCY_MIN = 3
 
 
 @dataclass(frozen=True)
@@ -112,9 +113,9 @@ class FeedbackStore:
                 for record in category_records
                 if record.effort == effort and record.execution_mode == execution_mode
             )
-            if len(exact_category) >= _EXACT_MIN:
+            if len(exact_category) >= EXACT_FEEDBACK_MIN:
                 return exact_category
-            if len(category_records) >= _CROSS_CONFIG_MIN:
+            if len(category_records) >= CROSS_CONFIG_FEEDBACK_MIN:
                 return category_records
 
             # Backward compatibility for feedback captured before categories
@@ -125,9 +126,9 @@ class FeedbackStore:
                 for record in untagged
                 if record.effort == effort and record.execution_mode == execution_mode
             )
-            if len(exact_untagged) >= _EXACT_MIN:
+            if len(exact_untagged) >= EXACT_FEEDBACK_MIN:
                 return exact_untagged
-            if len(untagged) >= _CROSS_CONFIG_MIN:
+            if len(untagged) >= CROSS_CONFIG_FEEDBACK_MIN:
                 return untagged
             return exact_category or exact_untagged
 
@@ -136,9 +137,9 @@ class FeedbackStore:
             for record in model_records
             if record.effort == effort and record.execution_mode == execution_mode
         )
-        if len(exact) >= _EXACT_MIN:
+        if len(exact) >= EXACT_FEEDBACK_MIN:
             return exact
-        if len(model_records) >= _CROSS_CONFIG_MIN:
+        if len(model_records) >= CROSS_CONFIG_FEEDBACK_MIN:
             return model_records
         return exact
 
@@ -150,7 +151,7 @@ class FeedbackStore:
         task_category: str | None = None,
     ) -> float:
         records = self.matching(model_id, effort, execution_mode, task_category)
-        if len(records) < _EXACT_MIN:
+        if len(records) < EXACT_FEEDBACK_MIN:
             return 0.0
         observed = sum(_OUTCOME_VALUE[record.outcome] for record in records) / len(records)
         retry_penalty = min(
@@ -248,7 +249,7 @@ class FeedbackStore:
             latency_sensitivity,
             cost_sensitivity,
         )
-        if len(scores) < _EXACT_MIN:
+        if len(scores) < PAIRED_EFFICIENCY_MIN:
             return 0.0
         sample_weight = min(1.0, (len(scores) - 2) / 6.0)
         observed = sum(scores) / len(scores)
