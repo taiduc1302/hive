@@ -183,6 +183,50 @@ def _groups_from_events(rows: tuple[dict[str, Any], ...], node_filter: str | Non
     return groups
 
 
+def _turn_data(turn: dict[str, Any]) -> dict[str, Any]:
+    data = turn.get("data") or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _sum_positive_float(turns: list[dict[str, Any]], field: str) -> float | None:
+    values = [
+        float(value)
+        for turn in turns
+        if isinstance((value := _turn_data(turn).get(field)), (int, float)) and value > 0
+    ]
+    return round(sum(values), 8) if values else None
+
+
+def _sum_optional_float(turns: list[dict[str, Any]], field: str) -> float | None:
+    values = [
+        float(value)
+        for turn in turns
+        if field in _turn_data(turn)
+        and isinstance((value := _turn_data(turn).get(field)), (int, float))
+        and value >= 0
+    ]
+    return round(sum(values), 8) if values else None
+
+
+def _sum_token_metric(
+    turns: list[dict[str, Any]],
+    field: str,
+    *,
+    allow_zero: bool,
+) -> int | None:
+    values = [
+        int(value)
+        for turn in turns
+        if isinstance((value := _turn_data(turn).get(field)), (int, float)) and value >= 0
+    ]
+    if not values:
+        return None
+    total = sum(values)
+    if total == 0 and not allow_zero:
+        return None
+    return total
+
+
 def import_hive_trace(
     events_path: str | Path,
     registry: ModelRegistry,
@@ -196,14 +240,15 @@ def import_hive_trace(
     """Convert persisted Hive telemetry into conservative UsageRecords.
 
     ``events_path`` is the session ``events.jsonl`` written by EventBus. It is
-    the authoritative source for model and USD cost. ``details_path`` is the
-    optional runtime ``logs/details.jsonl`` and supplies node outcome, retries,
-    and wall-clock latency when a unique node-detail row can be joined safely.
+    the authoritative source for model, token/cache usage, Hive credits, and
+    USD cost. ``details_path`` is the optional runtime ``logs/details.jsonl``
+    and supplies node outcome, retries, and wall-clock latency when a unique
+    node-detail row can be joined safely.
 
     A mixed-model node is skipped rather than assigning the combined outcome
-    or cost to one model. A user-supplied ``task_id`` is accepted only together
-    with ``node_id`` so a benchmark ID cannot accidentally be stamped on every
-    node in a session.
+    or telemetry to one model. A user-supplied ``task_id`` is accepted only
+    together with ``node_id`` so a benchmark ID cannot accidentally be stamped
+    on every node in a session.
     """
     if task_id and not node_id:
         raise ValueError("--task-id requires --node-id when importing a Hive trace")
@@ -225,7 +270,7 @@ def import_hive_trace(
         normalized: list[ModelProfile] = []
         has_unknown_model = False
         for turn in turns:
-            raw_model = str((turn.get("data") or {}).get("model") or "")
+            raw_model = str(_turn_data(turn).get("model") or "")
             model = _normalize_model(raw_model, registry)
             if model is None:
                 has_unknown_model = True
@@ -258,12 +303,21 @@ def import_hive_trace(
             unknown_outcomes += 1
             continue
 
-        cost_values = []
-        for turn in turns:
-            raw_cost = (turn.get("data") or {}).get("cost_usd")
-            if isinstance(raw_cost, (int, float)) and raw_cost > 0:
-                cost_values.append(float(raw_cost))
-        cost_usd = round(sum(cost_values), 8) if cost_values else None
+        cost_usd = _sum_positive_float(turns, "cost_usd")
+        input_tokens = _sum_token_metric(turns, "input_tokens", allow_zero=False)
+        output_tokens = _sum_token_metric(turns, "output_tokens", allow_zero=False)
+        token_telemetry_present = input_tokens is not None or output_tokens is not None
+        cached_tokens = (
+            _sum_token_metric(turns, "cached_tokens", allow_zero=True)
+            if token_telemetry_present
+            else None
+        )
+        cache_creation_tokens = (
+            _sum_token_metric(turns, "cache_creation_tokens", allow_zero=True)
+            if token_telemetry_present
+            else None
+        )
+        credits = _sum_optional_float(turns, "credits")
 
         latency_seconds: float | None = None
         detail_latency = detail.get("latency_ms") if detail else None
@@ -290,6 +344,11 @@ def import_hive_trace(
                 retries=retries,
                 latency_seconds=latency_seconds,
                 cost_usd=cost_usd,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                cache_creation_tokens=cache_creation_tokens,
+                credits=credits,
                 task_category=task_category,
                 task_id=task_id,
                 source_id=f"hive:{group.execution_id}:{group.node_id}",
@@ -353,21 +412,32 @@ def import_report_markdown(
             f"Ambiguous runtime-detail joins: **{report.ambiguous_runtime_details}**",
             f"Corrupt JSONL lines ignored: **{report.corrupt_lines}**",
             "",
-            "| Source | Model | Outcome | Retries | Latency | Cost |",
-            "|---|---|---|---:|---:|---:|",
+            "| Source | Model | Outcome | Retries | Latency | In/Out tokens | Cache read | Cost | Credits |",
+            "|---|---|---|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for record in report.records:
         latency = f"{record.latency_seconds:.3f}s" if record.latency_seconds else "—"
+        token_pair = (
+            f"{record.input_tokens}/{record.output_tokens}"
+            if record.input_tokens is not None or record.output_tokens is not None
+            else "—"
+        )
+        cache_read = str(record.cached_tokens) if record.cached_tokens is not None else "—"
         cost = f"${record.cost_usd:.6f}" if record.cost_usd is not None else "—"
+        credits = f"{record.credits:.4f}" if record.credits is not None else "—"
         lines.append(
             f"| `{record.source_id}` | `{record.model_id}` | {record.outcome} | "
-            f"{record.retries} | {latency} | {cost} |"
+            f"{record.retries} | {latency} | {token_pair} | {cache_read} | {cost} | {credits} |"
         )
     lines.extend(
         [
             "",
-            "Mixed-model nodes are deliberately excluded. Unreported cost remains unknown rather than being treated as free.",
+            (
+                "Mixed-model nodes are deliberately excluded. Unreported cost remains unknown "
+                "rather than being treated as free. Cached/cache-creation tokens are subsets of "
+                "input tokens and are retained for diagnostics, not added to token totals."
+            ),
             "",
         ]
     )
