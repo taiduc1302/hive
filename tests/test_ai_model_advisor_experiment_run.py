@@ -41,6 +41,8 @@ def _model_pair(plan):
 def _success_executor(payload):
     side = payload["side"]
     return {
+        "schema_version": 1,
+        "applied_configuration": payload["configuration"],
         "outcome": "success",
         "retries": 0,
         "latency_seconds": 10 if side == "A" else 20,
@@ -110,7 +112,12 @@ def test_runner_stages_no_pair_when_adapter_fails_mid_run():
         calls.append(payload["side"])
         if payload["side"] == "B":
             raise RunnerInfrastructureError("synthetic adapter outage")
-        return {"outcome": "success", "latency_seconds": 1.0}
+        return {
+            "schema_version": 1,
+            "applied_configuration": payload["configuration"],
+            "outcome": "success",
+            "latency_seconds": 1.0,
+        }
 
     with pytest.raises(RunnerInfrastructureError, match="adapter outage"):
         run_experiment_pair(
@@ -122,6 +129,46 @@ def test_runner_stages_no_pair_when_adapter_fails_mid_run():
         )
 
     assert calls == ["A", "B"]
+
+
+def test_adapter_configuration_mismatch_is_infrastructure_failure():
+    plan = _plan()
+    pair = _model_pair(plan)
+
+    def executor(payload):
+        wrong = dict(payload["configuration"])
+        wrong["effort"] = "ignored-by-adapter"
+        return {
+            "schema_version": 1,
+            "applied_configuration": wrong,
+            "outcome": "success",
+        }
+
+    with pytest.raises(RunnerInfrastructureError, match="does not match"):
+        run_experiment_pair(
+            plan,
+            FeedbackStore(),
+            pair["experiment_id"],
+            "fixed benchmark",
+            executor,
+        )
+
+
+def test_missing_configuration_echo_is_infrastructure_failure():
+    plan = _plan()
+    pair = _model_pair(plan)
+
+    def executor(_payload):
+        return {"schema_version": 1, "outcome": "success"}
+
+    with pytest.raises(RunnerInfrastructureError, match="applied_configuration"):
+        run_experiment_pair(
+            plan,
+            FeedbackStore(),
+            pair["experiment_id"],
+            "fixed benchmark",
+            executor,
+        )
 
 
 def test_append_pair_feedback_writes_both_records_together(tmp_path):
