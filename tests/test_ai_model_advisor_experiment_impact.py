@@ -18,7 +18,7 @@ def _registry():
     return ModelRegistry(REGISTRY)
 
 
-def _plan():
+def _plan(providers=None, *, include_limited=False):
     profiles = ActivityAnalyzer().category_profiles_from_texts(
         [
             "Implement a backend API endpoint and update tests",
@@ -27,7 +27,12 @@ def _plan():
         ]
     )
     registry = _registry()
-    return build_experiment_plan(profiles, RecommendationEngine(registry))
+    return build_experiment_plan(
+        profiles,
+        RecommendationEngine(registry),
+        providers=providers,
+        include_limited=include_limited,
+    )
 
 
 def _implementation_pair(plan, kind="model"):
@@ -113,6 +118,43 @@ def test_experiment_impact_rescores_a_decided_winner_against_live_router():
         assert impact["next_action"]["type"] == "review_router_gap"
 
 
+def test_experiment_impact_inherits_saved_provider_scope():
+    plan = _plan(["anthropic"])
+    assert plan["routing_scope"] == {
+        "providers": ["anthropic"],
+        "include_limited": False,
+    }
+
+    report = build_experiment_impact(plan, FeedbackStore(), _registry())
+    assert report["routing_scope_used"] == {
+        "providers": ["anthropic"],
+        "include_limited": False,
+    }
+    assert report["impacts"]
+    assert all(
+        impact["current_router"] is not None
+        and impact["current_router"]["provider"] == "anthropic"
+        for impact in report["impacts"]
+    )
+
+
+def test_experiment_impact_explicit_provider_override_wins_over_saved_scope():
+    plan = _plan(["anthropic"])
+    report = build_experiment_impact(
+        plan,
+        FeedbackStore(),
+        _registry(),
+        providers=["openai"],
+    )
+    assert report["routing_scope_used"]["providers"] == ["openai"]
+    assert report["impacts"]
+    assert all(
+        impact["current_router"] is not None
+        and impact["current_router"]["provider"] == "openai"
+        for impact in report["impacts"]
+    )
+
+
 def test_experiment_impact_markdown_is_explicitly_read_only():
     plan = _plan()
     report = build_experiment_impact(plan, FeedbackStore(), _registry())
@@ -121,3 +163,4 @@ def test_experiment_impact_markdown_is_explicitly_read_only():
     assert "Experiment Impact" in markdown
     assert "read-only" in markdown
     assert "Router-gap" in markdown
+    assert "Routing scope" in markdown
