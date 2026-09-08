@@ -46,6 +46,7 @@ Each pair contains:
 
 - a deterministic experiment ID based on category and both configurations;
 - the exact A and B model/effort/execution settings;
+- the workload profile and its cost/latency sensitivities at planning time;
 - a shared `task_id` template;
 - successful paired task IDs already present in feedback;
 - paired tasks still needed before cost/latency efficiency becomes active;
@@ -55,7 +56,7 @@ The planner never calls a provider and never writes feedback. It is a controlled
 
 ## Evaluate a fixed experiment plan
 
-Keep the JSON created by `experiment-plan`. It freezes the exact A/B configurations so the comparison cannot silently change later when the router's ranking changes.
+Keep the JSON created by `experiment-plan`. It freezes the exact A/B configurations and planning-time workload sensitivities so the comparison cannot silently change later when the router's ranking changes.
 
 After recording or importing attempts whose `task_id` values follow the plan's template, evaluate the same plan:
 
@@ -67,19 +68,34 @@ python -m tools.ai_model_advisor.cli experiment-evaluate \
   --json-output /tmp/model-experiment-results.json
 ```
 
-`experiment-evaluate` is descriptive only. It never writes routing policy or modifies feedback.
+`experiment-evaluate` is descriptive only. It never writes routing policy or modifies feedback. `experiment_eval.py` is the canonical implementation; the older `experiment_evaluate.py` module path is retained as a compatibility shim for scripts created while the feature branch was evolving.
 
-For every planned pair it:
+For every planned pair the evaluator:
 
 - matches only the exact A/B model + effort + execution configurations from the saved plan;
 - matches only task IDs under that experiment's deterministic task-ID prefix;
-- requires one unambiguous record per side for a task to become a complete pair;
-- excludes duplicate attempts for a side as ambiguous instead of silently choosing one;
-- reports one-sided/incomplete tasks separately;
-- reports quality, retries, median cost, and median latency for the complete paired tasks;
-- refuses to suggest a winner before the minimum three paired tasks are complete.
+- requires exactly one record per side for a task to become a complete pair;
+- excludes duplicate attempts for either side as **ambiguous** instead of averaging or guessing which attempt should count;
+- reports one-sided/incomplete task IDs separately;
+- reports A/B success/partial/failure counts, mean retries, median USD cost, and median latency over the complete paired records;
+- calculates a retry-aware quality score per paired task: `success=1`, `partial=0.5`, `failure=0`, reduced by the same capped retry penalty used by the feedback quality logic;
+- reports A/B quality wins and ties plus the aggregate retry-aware quality delta;
+- calculates a workload-weighted cost/latency efficiency delta only from paired tasks where **both sides succeeded**;
+- uses the cost and latency sensitivities saved in the experiment plan rather than whatever the current workload happens to be later;
+- exposes `decision`, `decision_basis`, `winner_side`, the winning configuration when one exists, and `policy_ready`;
+- exposes a low/medium/high confidence band plus a numeric confidence score, explicitly labeled as a **heuristic evidence-strength indicator, not a probability or p-value**;
+- refuses to become policy-ready until the experiment has at least the required paired-task threshold.
 
-Quality has priority. If one side has a higher mean outcome score (`success=1`, `partial=0.5`, `failure=0`), the evaluator reports a quality lead even if the other side was cheaper. When quality is tied, retries/cost/latency can provide a secondary efficiency lead. If those secondary signals disagree, the evaluator reports a trade-off rather than forcing a winner.
+### Decision hierarchy
+
+Quality comes first. If the retry-aware quality delta is materially positive or negative, the evaluator reports a quality lead even when the other side is cheaper or faster.
+
+When quality is effectively tied, the evaluator looks at secondary evidence:
+
+- **retry leader** from the complete paired records;
+- **workload-weighted efficiency leader** from successful same-task cost/latency pairs.
+
+If the available secondary signals agree, the evaluator can report an efficiency lead. If they disagree, it reports `tradeoff` rather than forcing a winner. Cost and latency leaders are also surfaced separately for diagnosis even though the decision uses their workload-weighted combination.
 
 This evaluation does not replace the live feedback scorer. It exists to make controlled experiments interpretable before you decide whether the accumulated evidence is trustworthy enough to influence normal routing.
 
