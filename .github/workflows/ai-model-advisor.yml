@@ -9,6 +9,7 @@ on:
       - "skills/ai-model-advisor/**"
       - "docs/AI_MODEL_ADVISOR.md"
       - "docs/AI_MODEL_ADVISOR_EXPERIMENTS.md"
+      - "docs/AI_MODEL_ADVISOR_CONFIGURATION_ROUTING.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
       - ".github/workflows/ai-model-advisor.yml"
   schedule:
@@ -90,6 +91,16 @@ jobs:
             --output model-advisor-output/routing-matrix.md \
             --json-output model-advisor-output/routing-matrix.json
 
+      - name: Generate controlled experiment plan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.ai_model_advisor.cli experiment-plan \
+            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/experiment-plan.md \
+            --json-output model-advisor-output/experiment-plan.json
+
       - name: Smoke-test feedback evidence commands
         run: |
           python -m tools.ai_model_advisor.cli feedback-report \
@@ -107,6 +118,8 @@ jobs:
           cat model-advisor-output/recommendation.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/routing-matrix.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/source-scan.md >> "$GITHUB_STEP_SUMMARY"
 
