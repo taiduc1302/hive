@@ -50,9 +50,20 @@ Each pair contains:
 - a shared `task_id` template;
 - successful paired task IDs already present in feedback;
 - paired tasks still needed before cost/latency efficiency becomes active;
+- a machine-readable collection status;
 - the rationale for the comparison.
 
 The planner never calls a provider and never writes feedback. It is a controlled experiment manifest, not an autonomous benchmark executor.
+
+### Collection lifecycle
+
+The plan JSON exposes a stable lifecycle so automation does not need to parse Markdown:
+
+- `planned` — no complete successful A/B task has been collected yet;
+- `collecting` — at least one successful paired task exists but the paired-task threshold is not met;
+- `ready` — the collection threshold has been met and the saved plan is ready for evaluation.
+
+The plan also exposes `planned_experiments`, `collecting_experiments`, and `ready_experiments` totals.
 
 ## Evaluate a fixed experiment plan
 
@@ -85,6 +96,18 @@ For every planned pair the evaluator:
 - exposes `decision`, `decision_basis`, `winner_side`, the winning configuration when one exists, and `policy_ready`;
 - exposes a low/medium/high confidence band plus a numeric confidence score, explicitly labeled as a **heuristic evidence-strength indicator, not a probability or p-value**;
 - refuses to become policy-ready until the experiment has at least the required paired-task threshold.
+
+### Evaluation lifecycle
+
+Evaluation continues the same machine-readable state model:
+
+- `planned` — zero complete paired tasks;
+- `collecting` — some complete pairs exist but the threshold is not met;
+- `ready` — the threshold is met but the evidence does not justify a directional winner;
+- `decided` — the evaluator has a directional A/B winner from quality or aligned secondary evidence;
+- `tradeoff` — the threshold is met but secondary evidence conflicts, so forcing a winner would hide a real cost/quality/retry trade-off.
+
+The evaluation report includes `status_counts` for all five states. `ready` does **not** mean “adopt A”; it means the experiment has enough paired evidence to inspect, but no directional winner was justified by the evaluator.
 
 ### Decision hierarchy
 
@@ -146,7 +169,8 @@ The report still shows partial progress. For each observed configuration it calc
 6. Record/import both outcomes with the same category and task ID.
 7. Repeat on at least three comparable tasks before using latency/cost differences.
 8. Run `experiment-evaluate` against the saved plan JSON.
-9. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
+9. Use the lifecycle status to decide whether to collect more evidence, inspect a trade-off, or treat the comparison as decided.
+10. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
 
 Do not optimize for token count alone. Token/cache/Hive-credit telemetry is retained for diagnostics, but it currently has no routing-score effect. A configuration that spends more tokens but succeeds more reliably can still be the better choice.
 
