@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .experiment_judge import OutcomeJudge, apply_outcome_judge, command_judge
 from .experiment_run import (
     ExperimentRunnerError,
+    RunnerExecutor,
     append_pair_feedback,
     command_executor,
     ensure_experiment_collectable,
@@ -46,6 +48,17 @@ def _task_text(args: argparse.Namespace) -> str:
 def _redacted_preview_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Return audit metadata without persisting the benchmark prompt itself."""
     return {key: value for key, value in payload.items() if key != "task"}
+
+
+def _with_outcome_judge(executor: RunnerExecutor, judge: OutcomeJudge | None) -> RunnerExecutor:
+    if judge is None:
+        return executor
+
+    def execute(payload: dict[str, Any]) -> dict[str, Any]:
+        adapter_result = executor(payload)
+        return apply_outcome_judge(payload, adapter_result, judge)
+
+    return execute
 
 
 def build_preview(
@@ -189,8 +202,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=1800.0,
         help="Per-side adapter timeout; only used with --apply",
     )
+    parser.add_argument(
+        "--judge-timeout-seconds",
+        type=float,
+        default=300.0,
+        help="Per-side deterministic outcome-checker timeout; only used with --judge",
+    )
     parser.add_argument("--output", help="Optional Markdown report")
     parser.add_argument("--json-output")
+    parser.add_argument(
+        "--judge",
+        nargs="+",
+        help=(
+            "Optional deterministic outcome-checker argv. It receives task/config + adapter result "
+            "and replaces adapter self-reported outcome. Put this before --runner."
+        ),
+    )
     parser.add_argument(
         "--runner",
         nargs=argparse.REMAINDER,
@@ -227,6 +254,12 @@ def main(argv: list[str] | None = None) -> int:
     if not runner_argv:
         raise ExperimentRunnerError("--runner is required when --apply is used")
 
+    judge = command_judge(args.judge, args.judge_timeout_seconds) if args.judge else None
+    executor = _with_outcome_judge(
+        command_executor(runner_argv, args.timeout_seconds),
+        judge,
+    )
+
     # Reload immediately before spending provider credits so a previous run or
     # another writer that completed after the initial preview is noticed.
     live_feedback = FeedbackStore.load(args.feedback)
@@ -244,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         live_feedback,
         args.experiment_id,
         task,
-        command_executor(runner_argv, args.timeout_seconds),
+        executor,
         task_id=preview["task_id"],
         order=args.order,
         allow_ready=args.allow_ready,
