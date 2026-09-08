@@ -40,6 +40,29 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
             if record.latency_seconds is not None
         ]
         costs = [float(record.cost_usd) for record in records if record.cost_usd is not None]
+        input_tokens = [
+            float(record.input_tokens)
+            for record in records
+            if record.input_tokens is not None
+        ]
+        output_tokens = [
+            float(record.output_tokens)
+            for record in records
+            if record.output_tokens is not None
+        ]
+        cache_read_ratios = [
+            float(record.cached_tokens) / float(record.input_tokens)
+            for record in records
+            if record.cached_tokens is not None
+            and record.input_tokens is not None
+            and record.input_tokens > 0
+        ]
+        cache_creation_tokens = [
+            float(record.cache_creation_tokens)
+            for record in records
+            if record.cache_creation_tokens is not None
+        ]
+        credits = [float(record.credits) for record in records if record.credits is not None]
         task_ids = {record.task_id for record in records if record.task_id}
         source_ids = {record.source_id for record in records if record.source_id}
         task_category = None if category == "untagged" else category
@@ -69,6 +92,16 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
                 "median_latency_seconds": _median(latencies),
                 "cost_samples": len(costs),
                 "median_cost_usd": _median(costs),
+                "input_token_samples": len(input_tokens),
+                "median_input_tokens": _median(input_tokens),
+                "output_token_samples": len(output_tokens),
+                "median_output_tokens": _median(output_tokens),
+                "cache_read_samples": len(cache_read_ratios),
+                "median_cache_read_ratio": _median(cache_read_ratios),
+                "cache_creation_samples": len(cache_creation_tokens),
+                "median_cache_creation_tokens": _median(cache_creation_tokens),
+                "credit_samples": len(credits),
+                "median_credits": _median(credits),
                 "unique_task_ids": len(task_ids),
                 "unique_source_ids": len(source_ids),
                 "exact_quality_eligible": exact_count >= EXACT_FEEDBACK_MIN,
@@ -160,10 +193,31 @@ def feedback_audit_markdown(audit: dict[str, Any]) -> str:
             if row["median_cost_usd"] is not None
             else "no cost observations"
         )
+        tokens = (
+            f"median tokens in/out {row['median_input_tokens']:.0f}/{row['median_output_tokens']:.0f}"
+            if row["median_input_tokens"] is not None and row["median_output_tokens"] is not None
+            else "token telemetry incomplete"
+        )
+        cache_read = (
+            f"median cache-read {row['median_cache_read_ratio'] * 100:.1f}% of input"
+            if row["median_cache_read_ratio"] is not None
+            else "no cache-read telemetry"
+        )
+        cache_creation = (
+            f"median cache-write {row['median_cache_creation_tokens']:.0f} tokens"
+            if row["median_cache_creation_tokens"] is not None
+            else "no cache-write telemetry"
+        )
+        credits = (
+            f"median Hive credits {row['median_credits']:.4f}"
+            if row["median_credits"] is not None
+            else "no Hive-credit telemetry"
+        )
         lines.append(
             f"- **{row['category']} / {row['model_id']} / {row['effort']} / {row['execution_mode']}**: "
-            f"avg retries {row['average_retries']:.3f}; {latency}; {cost}; "
-            f"{row['unique_task_ids']} task IDs; {row['unique_source_ids']} source IDs."
+            f"avg retries {row['average_retries']:.3f}; {latency}; {cost}; {tokens}; "
+            f"{cache_read}; {cache_creation}; {credits}; {row['unique_task_ids']} task IDs; "
+            f"{row['unique_source_ids']} source IDs."
         )
 
     lines.extend(
@@ -171,7 +225,8 @@ def feedback_audit_markdown(audit: dict[str, Any]) -> str:
             "",
             (
                 "A non-zero empirical adjustment should be explainable by this report. "
-                "Rows below threshold remain historical evidence but do not independently change routing."
+                "Rows below threshold remain historical evidence but do not independently change routing. "
+                "Token/cache/credit telemetry is diagnostic-only and currently has no scoring effect."
             ),
             "",
         ]
