@@ -97,6 +97,17 @@ def _pair(
     else:
         status = "ready"
 
+    if status in {"planned", "collecting"}:
+        next_action = {
+            "type": "collect_paired_tasks",
+            "paired_tasks_needed": remaining,
+        }
+    else:
+        next_action = {
+            "type": "evaluate_saved_plan",
+            "paired_tasks_needed": 0,
+        }
+
     if kind == "model":
         rationale = (
             "Compare the current best configuration with the strongest different model "
@@ -117,6 +128,7 @@ def _pair(
         "kind": kind,
         "priority": priority,
         "status": status,
+        "next_action": next_action,
         "category": category,
         "primary": primary.as_dict(),
         "challenger": challenger.as_dict(),
@@ -279,11 +291,17 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
         for pair in sorted(category["pairs"], key=lambda item: item["priority"]):
             primary = _config_text_from_dict(pair["primary"])
             challenger = _config_text_from_dict(pair["challenger"])
+            action = pair["next_action"]
+            if action["type"] == "collect_paired_tasks":
+                action_text = f"collect {action['paired_tasks_needed']} more paired task(s)"
+            else:
+                action_text = "evaluate the saved plan"
             lines.extend(
                 [
                     f"### {pair['priority']}. {pair['kind']} comparison",
                     "",
                     f"- Status: **{pair['status']}**",
+                    f"- Next action: **{action_text}**",
                     f"- Experiment ID: `{pair['experiment_id']}`",
                     f"- A: `{primary}`",
                     f"- B: `{challenger}`",
