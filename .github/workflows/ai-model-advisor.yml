@@ -8,6 +8,7 @@ on:
       - "tests/test_ai_model_advisor*.py"
       - "skills/ai-model-advisor/**"
       - "docs/AI_MODEL_ADVISOR.md"
+      - "docs/AI_MODEL_ADVISOR_EXPERIMENTS.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
       - ".github/workflows/ai-model-advisor.yml"
   schedule:
@@ -88,6 +89,17 @@ jobs:
             --github-user "${GITHUB_REPOSITORY_OWNER}" \
             --output model-advisor-output/routing-matrix.md \
             --json-output model-advisor-output/routing-matrix.json
+
+      - name: Smoke-test feedback evidence commands
+        run: |
+          python -m tools.ai_model_advisor.cli feedback-report \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/feedback-audit-smoke.md \
+            --json-output model-advisor-output/feedback-audit-smoke.json
+          python -m tools.ai_model_advisor.cli feedback-readiness \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/feedback-readiness-smoke.md \
+            --json-output model-advisor-output/feedback-readiness-smoke.json
 
       - name: Publish advisor summary
         shell: bash
