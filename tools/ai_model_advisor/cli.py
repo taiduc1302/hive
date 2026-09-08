@@ -118,6 +118,11 @@ def command_feedback_add(args: argparse.Namespace) -> int:
         retries=args.retries,
         latency_seconds=args.latency_seconds,
         cost_usd=args.cost_usd,
+        input_tokens=args.input_tokens,
+        output_tokens=args.output_tokens,
+        cached_tokens=args.cached_tokens,
+        cache_creation_tokens=args.cache_creation_tokens,
+        credits=args.credits,
         task_category=args.task_category,
         task_id=args.task_id,
         note=args.note or "",
@@ -257,6 +262,11 @@ def build_parser() -> argparse.ArgumentParser:
     feedback.add_argument("--retries", type=int, default=0)
     feedback.add_argument("--latency-seconds", type=float)
     feedback.add_argument("--cost-usd", type=float)
+    feedback.add_argument("--input-tokens", type=int)
+    feedback.add_argument("--output-tokens", type=int)
+    feedback.add_argument("--cached-tokens", type=int)
+    feedback.add_argument("--cache-creation-tokens", type=int)
+    feedback.add_argument("--credits", type=float)
     feedback.add_argument("--task-category")
     feedback.add_argument(
         "--task-id",
