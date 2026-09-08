@@ -10,6 +10,7 @@ from statistics import median
 _OUTCOME_VALUE = {"success": 1.0, "partial": 0.5, "failure": 0.0}
 EXACT_FEEDBACK_MIN = 3
 CROSS_CONFIG_FEEDBACK_MIN = 6
+CROSS_CONFIG_WEIGHT = 0.35
 PAIRED_EFFICIENCY_MIN = 3
 
 
@@ -77,9 +78,10 @@ class FeedbackStore:
     Quality adjustments are deliberately conservative: fewer than three exact
     configuration observations have no routing effect. Evidence from other
     effort/execution configurations of the same model is used only after six
-    category-compatible observations exist. Larger samples are shrunk toward
-    neutral so a short streak cannot dominate the static capability model.
-    Category-tagged feedback never leaks into a different task category.
+    category-compatible observations exist and is discounted relative to exact
+    evidence. Larger samples are shrunk toward neutral so a short streak cannot
+    dominate the static capability model. Category-tagged feedback never leaks
+    into a different task category.
 
     Cost and latency are stricter. They affect routing only when the same
     ``task_id`` was successfully attempted by the candidate configuration and
@@ -128,13 +130,13 @@ class FeedbackStore:
     def source_ids(self) -> frozenset[str]:
         return frozenset(record.source_id for record in self.records if record.source_id)
 
-    def matching(
+    def _matching_with_scope(
         self,
         model_id: str,
         effort: str,
         execution_mode: str,
         task_category: str | None = None,
-    ) -> tuple[UsageRecord, ...]:
+    ) -> tuple[tuple[UsageRecord, ...], str]:
         model_records = tuple(record for record in self.records if record.model_id == model_id)
 
         if task_category:
@@ -147,9 +149,9 @@ class FeedbackStore:
                 if record.effort == effort and record.execution_mode == execution_mode
             )
             if len(exact_category) >= EXACT_FEEDBACK_MIN:
-                return exact_category
+                return exact_category, "exact"
             if len(category_records) >= CROSS_CONFIG_FEEDBACK_MIN:
-                return category_records
+                return category_records, "cross_config"
 
             # Backward compatibility for feedback captured before categories
             # existed. Never borrow evidence from a different named category.
@@ -160,10 +162,10 @@ class FeedbackStore:
                 if record.effort == effort and record.execution_mode == execution_mode
             )
             if len(exact_untagged) >= EXACT_FEEDBACK_MIN:
-                return exact_untagged
+                return exact_untagged, "exact"
             if len(untagged) >= CROSS_CONFIG_FEEDBACK_MIN:
-                return untagged
-            return exact_category or exact_untagged
+                return untagged, "cross_config"
+            return exact_category or exact_untagged, "below_threshold"
 
         exact = tuple(
             record
@@ -171,10 +173,40 @@ class FeedbackStore:
             if record.effort == effort and record.execution_mode == execution_mode
         )
         if len(exact) >= EXACT_FEEDBACK_MIN:
-            return exact
+            return exact, "exact"
         if len(model_records) >= CROSS_CONFIG_FEEDBACK_MIN:
-            return model_records
-        return exact
+            return model_records, "cross_config"
+        return exact, "below_threshold"
+
+    def matching(
+        self,
+        model_id: str,
+        effort: str,
+        execution_mode: str,
+        task_category: str | None = None,
+    ) -> tuple[UsageRecord, ...]:
+        records, _ = self._matching_with_scope(
+            model_id,
+            effort,
+            execution_mode,
+            task_category,
+        )
+        return records
+
+    def evidence_scope(
+        self,
+        model_id: str,
+        effort: str,
+        execution_mode: str,
+        task_category: str | None = None,
+    ) -> str:
+        _, scope = self._matching_with_scope(
+            model_id,
+            effort,
+            execution_mode,
+            task_category,
+        )
+        return scope
 
     def adjustment(
         self,
@@ -183,7 +215,12 @@ class FeedbackStore:
         execution_mode: str,
         task_category: str | None = None,
     ) -> float:
-        records = self.matching(model_id, effort, execution_mode, task_category)
+        records, scope = self._matching_with_scope(
+            model_id,
+            effort,
+            execution_mode,
+            task_category,
+        )
         if len(records) < EXACT_FEEDBACK_MIN:
             return 0.0
         observed = sum(_OUTCOME_VALUE[record.outcome] for record in records) / len(records)
@@ -194,7 +231,10 @@ class FeedbackStore:
         quality = max(0.0, observed - retry_penalty)
         sample_weight = min(1.0, (len(records) - 2) / 8.0)
         shrunk = 0.5 + (quality - 0.5) * sample_weight
-        return round((shrunk - 0.5) * 16.0, 3)
+        adjustment = (shrunk - 0.5) * 16.0
+        if scope == "cross_config":
+            adjustment *= CROSS_CONFIG_WEIGHT
+        return round(adjustment, 3)
 
     @staticmethod
     def _config_key(record: UsageRecord) -> tuple[str, str, str]:
