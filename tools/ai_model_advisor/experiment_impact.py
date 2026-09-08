@@ -102,22 +102,53 @@ def _next_action(
     }
 
 
+def _resolve_scope(
+    plan: dict[str, Any],
+    providers: list[str] | None,
+    include_limited: bool | None,
+) -> tuple[list[str] | None, bool]:
+    saved = plan.get("routing_scope") or {}
+    if providers is None:
+        saved_providers = saved.get("providers")
+        resolved_providers = (
+            [str(provider) for provider in saved_providers]
+            if isinstance(saved_providers, list) and saved_providers
+            else None
+        )
+    else:
+        resolved_providers = list(providers)
+
+    resolved_limited = (
+        bool(saved.get("include_limited", False))
+        if include_limited is None
+        else bool(include_limited)
+    )
+    return resolved_providers, resolved_limited
+
+
 def build_experiment_impact(
     plan: dict[str, Any],
     feedback: FeedbackStore,
     registry: ModelRegistry,
     providers: list[str] | None = None,
-    include_limited: bool = False,
+    include_limited: bool | None = None,
 ) -> dict[str, Any]:
     """Compare fixed-plan experiment decisions with the current live router.
 
     This report is read-only. It does not promote a winner or write feedback.
     A decided experiment can disagree with the live router because the router
     also considers the full model field, static capability fit, configuration
-    priors, other empirical evidence, and current registry availability.
+    priors, other empirical evidence, and current registry availability. When
+    caller overrides are absent, the live-router comparison inherits the saved
+    experiment routing scope so provider-specific plans stay provider-specific.
     """
     engine = RecommendationEngine(registry, feedback)
     evaluation = evaluate_experiment_plan(plan, feedback)
+    resolved_providers, resolved_limited = _resolve_scope(
+        plan,
+        providers,
+        include_limited,
+    )
     categories = {
         str(category.get("category") or ""): category
         for category in plan.get("categories", [])
@@ -130,8 +161,8 @@ def build_experiment_impact(
         workload = _workload_from_category(category)
         current_rows = engine.recommend(
             workload,
-            providers=providers,
-            include_limited=include_limited,
+            providers=resolved_providers,
+            include_limited=resolved_limited,
             top_n=1,
         )
         current = current_rows[0] if current_rows else None
@@ -216,6 +247,10 @@ def build_experiment_impact(
     ]
     return {
         "registry_as_of": registry.as_of,
+        "routing_scope_used": {
+            "providers": resolved_providers,
+            "include_limited": resolved_limited,
+        },
         "experiments": len(impacts),
         "decided_experiments": len(decided_impacts),
         "aligned_decided_experiments": sum(
@@ -234,10 +269,15 @@ def build_experiment_impact(
 
 
 def experiment_impact_markdown(report: dict[str, Any]) -> str:
+    scope = report.get("routing_scope_used") or {}
+    providers = scope.get("providers")
+    provider_text = ", ".join(providers) if providers else "all active providers"
+    limited_text = "included" if scope.get("include_limited") else "excluded"
     lines = [
         "# AI Model Advisor Experiment Impact",
         "",
         f"Registry: **{report['registry_as_of']}**",
+        f"Routing scope: **{provider_text}**; limited models **{limited_text}**",
         f"Experiments checked: **{report['experiments']}**",
         f"Decided experiments: **{report['decided_experiments']}**",
         f"Router-aligned decided experiments: **{report['aligned_decided_experiments']}**",
