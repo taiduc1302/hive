@@ -48,28 +48,39 @@ Each pair contains:
 - the exact A and B model/effort/execution settings;
 - the workload profile and its cost/latency sensitivities at planning time;
 - a shared `task_id` template;
-- successful paired task IDs already present in feedback;
-- paired tasks still needed before cost/latency efficiency becomes active;
+- complete paired task IDs and both-success paired task IDs as separate evidence sets;
+- remaining complete pairs needed for quality/evaluation;
+- remaining both-success pairs needed before cost/latency efficiency can become active;
+- ambiguous duplicate and incomplete one-sided task IDs;
 - a machine-readable collection status;
 - a machine-readable `next_action`;
 - the rationale for the comparison.
 
 The planner never calls a provider and never writes feedback. It is a controlled experiment manifest, not an autonomous benchmark executor.
 
+### Complete pairs vs successful pairs
+
+A failed or partial A/B run is still useful quality evidence. The planner therefore separates two thresholds that happen to both be 3 today but mean different things:
+
+- **quality/evaluation readiness** uses complete experiment-scoped A/B pairs, regardless of whether one side failed or was partial;
+- **cost/latency efficiency readiness** uses only complete pairs where both sides succeeded, because comparing the speed or cost of a failed attempt against a successful attempt would reward the wrong behavior.
+
+The planner scopes progress to the deterministic experiment task-ID prefix and exact A/B configurations. Same-category records for the same configurations but outside that prefix do not advance the experiment. Duplicate attempts for one side are marked ambiguous instead of being counted, and one-sided tasks are marked incomplete.
+
 ### Collection lifecycle
 
 The plan JSON exposes a stable lifecycle so automation does not need to parse Markdown:
 
-- `planned` — no complete successful A/B task has been collected yet;
-- `collecting` — at least one successful paired task exists but the paired-task threshold is not met;
-- `ready` — the collection threshold has been met and the saved plan is ready for evaluation.
+- `planned` — no matching experiment-scoped attempt exists for either side;
+- `collecting` — experiment-scoped evidence exists but fewer than the required complete A/B pairs are available;
+- `ready` — the complete-pair quality threshold has been met and the saved plan is ready for evaluation, even if the both-success efficiency threshold is not yet met.
 
-The plan also exposes `planned_experiments`, `collecting_experiments`, and `ready_experiments` totals.
+The plan exposes `quality_ready` and `efficiency_ready` separately, plus `planned_experiments`, `collecting_experiments`, and `ready_experiments` totals.
 
 `next_action` turns those states into an executable instruction for another agent or CI job:
 
-- `collect_paired_tasks` with `paired_tasks_needed` while evidence is incomplete;
-- `evaluate_saved_plan` when the collection threshold has been reached.
+- `collect_paired_tasks` with `paired_tasks_needed` while the complete-pair quality threshold is incomplete;
+- `evaluate_saved_plan` when the experiment has enough complete pairs for quality evaluation.
 
 ## Evaluate a fixed experiment plan
 
@@ -102,23 +113,23 @@ For every planned pair the evaluator:
 - exposes `decision`, `decision_basis`, `winner_side`, the winning configuration when one exists, and `policy_ready`;
 - exposes a low/medium/high confidence band plus a numeric confidence score, explicitly labeled as a **heuristic evidence-strength indicator, not a probability or p-value**;
 - exposes a machine-readable `next_action` for the current evaluation state;
-- refuses to become policy-ready until the experiment has at least the required paired-task threshold.
+- refuses to become policy-ready until the experiment has at least the required complete-pair threshold.
 
 ### Evaluation lifecycle
 
 Evaluation continues the same machine-readable state model:
 
 - `planned` — zero complete paired tasks;
-- `collecting` — some complete pairs exist but the threshold is not met;
-- `ready` — the threshold is met but the evidence does not justify a directional winner;
+- `collecting` — some complete pairs exist but the quality threshold is not met;
+- `ready` — the quality threshold is met but the evidence does not justify a directional winner;
 - `decided` — the evaluator has a directional A/B winner from quality or aligned secondary evidence;
 - `tradeoff` — the threshold is met but secondary evidence conflicts, so forcing a winner would hide a real cost/quality/retry trade-off.
 
-The evaluation report includes `status_counts` for all five states. `ready` does **not** mean “adopt A”; it means the experiment has enough paired evidence to inspect, but no directional winner was justified by the evaluator.
+The evaluation report includes `status_counts` for all five states. `ready` does **not** mean “adopt A”; it means the experiment has enough complete paired evidence to inspect, but no directional winner was justified by the evaluator.
 
 The evaluator maps those states to explicit next actions:
 
-- `planned` / `collecting` → `collect_paired_tasks` with an exact remaining count;
+- `planned` / `collecting` → `collect_paired_tasks` with an exact remaining complete-pair count;
 - `decided` → `review_winner_and_rerun_router` and the winning side;
 - `tradeoff` → `review_tradeoff_or_collect_more`;
 - `ready` with no directional winner → `review_tie_or_collect_more`.
@@ -132,7 +143,7 @@ Quality comes first. If the retry-aware quality delta is materially positive or 
 When quality is effectively tied, the evaluator looks at secondary evidence:
 
 - **retry leader** from the complete paired records;
-- **workload-weighted efficiency leader** from successful same-task cost/latency pairs.
+- **workload-weighted efficiency leader** from both-success same-task cost/latency pairs.
 
 If the available secondary signals agree, the evaluator can report an efficiency lead. If they disagree, it reports `tradeoff` rather than forcing a winner. Cost and latency leaders are also surfaced separately for diagnosis even though the decision uses their workload-weighted combination.
 
@@ -175,15 +186,17 @@ The report still shows partial progress. For each observed configuration it calc
 - whether quality evidence is exact, same-model fallback, or below threshold;
 - the next evidence-collection action.
 
+`feedback-readiness` describes evidence available to the live router. The controlled experiment planner/evaluator is stricter about task identity: it requires experiment-scoped A/B task IDs so a causal comparison is not inferred from unrelated historical work.
+
 ## Suggested experiment loop
 
 1. Import existing Hive history and run `feedback-report`.
 2. Run `feedback-readiness` to see which evidence buckets are incomplete.
 3. Run `experiment-plan` on the activity source you actually want to optimize and keep its JSON output.
 4. Pick a proposed pair and use its shared `task_id` template for one real repeatable task.
-5. Run the same logical task under both proposed configurations.
+5. Run the same logical task under both proposed configurations, including failures and partial outcomes rather than discarding them.
 6. Record/import both outcomes with the same category and task ID.
-7. Repeat on at least three comparable tasks before using latency/cost differences.
+7. Repeat until at least three complete paired tasks exist for quality evaluation; cost/latency comparisons additionally require three both-success pairs.
 8. Run `experiment-evaluate` against the saved plan JSON.
 9. Follow `next_action` to collect more evidence, inspect a trade-off/tie, or review a directional winner and re-run routing.
 10. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
