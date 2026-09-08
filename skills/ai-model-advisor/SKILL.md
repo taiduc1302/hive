@@ -1,6 +1,6 @@
 ---
 name: ai-model-advisor
-description: Track current AI models, reasoning effort, coding-agent and orchestration changes, then recommend the best configuration for a user's real workload and repeated outcomes. Use when choosing ChatGPT/OpenAI/Codex or Claude/Claude Code model/mode, comparing high/xhigh/max/ultracode-style modes, reviewing recent AI releases, analyzing GitHub or explicit ChatGPT activity, importing Hive execution telemetry for model feedback, auditing learned model preferences, comparing repeated task cost/latency, or preparing a recurring model-selection review.
+description: Track current AI models, reasoning effort, coding-agent and orchestration changes, then recommend and empirically validate the best configuration for a user's real workload. Use when choosing ChatGPT/OpenAI/Codex or Claude/Claude Code model/mode, comparing high/xhigh/max/ultracode-style modes, reviewing AI releases, analyzing GitHub or explicit ChatGPT activity, importing Hive telemetry, auditing learned preferences, planning or running controlled A/B model/effort/execution experiments, comparing repeated task cost/latency, or preparing recurring model-selection reviews.
 ---
 
 # AI Model Advisor
@@ -37,12 +37,22 @@ After importing history, use `feedback-report` before changing routing defaults.
 
 For controlled A/B comparisons, assign the same stable `task_id` to repeated attempts of the same task and record the exact effort/execution mode. Compare cost/latency only across successful attempts of that same task and category. Never reward a failed attempt merely because it was fast or cheap.
 
-## 6. Return an actionable recommendation
+## 6. Run controlled experiments defensibly
+
+When the user wants to validate one model/effort/execution choice against another, generate and keep a fixed `experiment-plan` JSON, then read `references/experiment-runner.md`.
+
+Always preview `experiment-run` before real execution. Preview must launch nothing, write no feedback, and omit benchmark prompt text from preview artifacts while retaining its SHA-256.
+
+Use `--apply` only when real provider/execution work is intended. Require a trusted adapter to echo the exact `applied_configuration`; reject the observation if any requested provider/model/effort/execution field was not actually honored. Treat adapter failures, timeouts, malformed responses, unsupported controls, and configuration mismatches as infrastructure failures rather than model failures.
+
+Use live feedback readiness instead of trusting a potentially stale saved plan. Stop ordinary collection after the required complete A/B threshold unless extra evidence is explicitly desired. Evaluate the same saved plan with `experiment-evaluate`, then inspect `experiment-impact` before changing normal routing defaults.
+
+## 7. Return an actionable recommendation
 
 Use `references/output-pattern.md`. Give one primary configuration, one cheaper/faster fallback, one escalation configuration only if justified, and the exact trigger to switch between them. Include confidence and availability caveats. Cite official sources when current web data was used.
 
-When empirical history materially changes the ranking, say whether the evidence is outcome-based or paired same-task cost/latency evidence and indicate the sample size.
+When empirical history materially changes the ranking, state the relevant task category, whether the evidence is outcome-based or paired same-task cost/latency evidence, the sample size, and the applied empirical score delta when available. If the raw empirical sum was capped, say so rather than hiding the clipping.
 
-## 7. Recurring review
+## 8. Recurring review
 
 For ongoing monitoring, check official provider docs/release notes, compare material changes with the previous review, inspect only explicitly available activity/telemetry, run the feedback audit when personalization is active, and change defaults only when evidence supports it. Preserve prior source fingerprints so temporary provider-page failures do not create false change alerts.
