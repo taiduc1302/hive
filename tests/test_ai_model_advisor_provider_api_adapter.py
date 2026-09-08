@@ -115,6 +115,7 @@ def test_openai_response_parser_preserves_text_and_usage():
             "model": "gpt-5.6-terra",
             "status": "completed",
             "output_text": "candidate answer",
+            "reasoning": {"effort": "medium"},
             "usage": {
                 "input_tokens": 120,
                 "output_tokens": 30,
@@ -133,6 +134,26 @@ def test_openai_response_parser_preserves_text_and_usage():
     assert result["cached_tokens"] == 40
     assert result["cache_creation_tokens"] == 10
     assert result["applied_configuration"] == request.configuration
+
+
+def test_openai_response_parser_rejects_mismatched_effort_echo():
+    request = ProviderRequest(
+        provider="openai",
+        url="https://api.openai.com/v1/responses",
+        headers={},
+        body={},
+        configuration=_payload("openai")["configuration"],
+    )
+    with pytest.raises(ProviderAdapterError, match="reasoning.effort"):
+        parse_provider_response(
+            request,
+            {
+                "id": "resp_2",
+                "status": "completed",
+                "reasoning": {"effort": "low"},
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
 
 
 def test_anthropic_response_parser_normalizes_total_input_tokens_for_cache_invariant():
