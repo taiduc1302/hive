@@ -73,6 +73,10 @@ def test_experiment_evaluation_reports_planned_without_pairs():
     assert result["confidence"] == "insufficient"
     assert result["policy_ready"] is False
     assert result["status"] == "planned"
+    assert result["next_action"] == {
+        "type": "collect_paired_tasks",
+        "paired_tasks_needed": 3,
+    }
     assert report["policy_ready_experiments"] == 0
     assert report["status_counts"]["planned"] == report["experiments"]
     assert report["evaluations"] == report["results"]
@@ -105,6 +109,10 @@ def test_experiment_evaluation_marks_partial_collection_as_collecting():
     assert result["status"] == "collecting"
     assert result["decision"] == "insufficient_evidence"
     assert result["additional_paired_tasks_needed"] == 1
+    assert result["next_action"] == {
+        "type": "collect_paired_tasks",
+        "paired_tasks_needed": 1,
+    }
 
 
 def test_experiment_evaluation_prefers_outcome_quality_before_efficiency():
@@ -142,6 +150,11 @@ def test_experiment_evaluation_prefers_outcome_quality_before_efficiency():
     assert result["winner_side"] == "challenger"
     assert result["policy_ready"] is True
     assert result["status"] == "decided"
+    assert result["next_action"] == {
+        "type": "review_winner_and_rerun_router",
+        "paired_tasks_needed": 0,
+        "winner_side": "challenger",
+    }
     assert result["confidence"] in {"medium", "high"}
 
 
@@ -219,6 +232,10 @@ def test_conflicting_retry_and_efficiency_signals_become_tradeoff():
     assert result["decision"] == "tradeoff"
     assert result["status"] == "tradeoff"
     assert result["winner_side"] is None
+    assert result["next_action"] == {
+        "type": "review_tradeoff_or_collect_more",
+        "paired_tasks_needed": 1,
+    }
 
 
 def test_experiment_evaluation_ignores_same_configs_outside_experiment_prefix():
@@ -256,3 +273,4 @@ def test_experiment_evaluation_markdown_disclaims_statistical_probability():
     assert "not a statistical probability" in markdown
     assert "Experiment details" in markdown
     assert "Planned:" in markdown
+    assert "Next action:" in markdown
