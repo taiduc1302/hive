@@ -90,6 +90,13 @@ def _pair(
     shared = sorted(primary_tasks & challenger_tasks)
     experiment_id = _experiment_id(category, kind, primary, challenger)
     remaining = max(0, PAIRED_EFFICIENCY_MIN - len(shared))
+    if not shared:
+        status = "planned"
+    elif remaining > 0:
+        status = "collecting"
+    else:
+        status = "ready"
+
     if kind == "model":
         rationale = (
             "Compare the current best configuration with the strongest different model "
@@ -109,6 +116,7 @@ def _pair(
         "experiment_id": experiment_id,
         "kind": kind,
         "priority": priority,
+        "status": status,
         "category": category,
         "primary": primary.as_dict(),
         "challenger": challenger.as_dict(),
@@ -225,16 +233,16 @@ def build_experiment_plan(
             }
         )
 
+    all_pairs = [pair for item in categories for pair in item["pairs"]]
     return {
         "paired_efficiency_threshold": PAIRED_EFFICIENCY_MIN,
         "categories": categories,
-        "experiments": sum(len(item["pairs"]) for item in categories),
-        "ready_experiments": sum(
-            1
-            for item in categories
-            for pair in item["pairs"]
-            if pair["efficiency_ready"]
+        "experiments": len(all_pairs),
+        "planned_experiments": sum(pair["status"] == "planned" for pair in all_pairs),
+        "collecting_experiments": sum(
+            pair["status"] == "collecting" for pair in all_pairs
         ),
+        "ready_experiments": sum(pair["status"] == "ready" for pair in all_pairs),
     }
 
 
@@ -243,7 +251,9 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
         "# AI Model Advisor Experiment Plan",
         "",
         f"Proposed comparisons: **{plan['experiments']}**",
-        f"Already efficiency-ready: **{plan['ready_experiments']}**",
+        f"Planned: **{plan.get('planned_experiments', 0)}**",
+        f"Collecting: **{plan.get('collecting_experiments', 0)}**",
+        f"Ready for evaluation: **{plan['ready_experiments']}**",
         f"Paired-task threshold: **{plan['paired_efficiency_threshold']}**",
         "",
         (
@@ -273,6 +283,7 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
                 [
                     f"### {pair['priority']}. {pair['kind']} comparison",
                     "",
+                    f"- Status: **{pair['status']}**",
                     f"- Experiment ID: `{pair['experiment_id']}`",
                     f"- A: `{primary}`",
                     f"- B: `{challenger}`",
