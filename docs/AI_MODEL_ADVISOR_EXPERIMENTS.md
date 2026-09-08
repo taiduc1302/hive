@@ -51,6 +51,7 @@ Each pair contains:
 - successful paired task IDs already present in feedback;
 - paired tasks still needed before cost/latency efficiency becomes active;
 - a machine-readable collection status;
+- a machine-readable `next_action`;
 - the rationale for the comparison.
 
 The planner never calls a provider and never writes feedback. It is a controlled experiment manifest, not an autonomous benchmark executor.
@@ -64,6 +65,11 @@ The plan JSON exposes a stable lifecycle so automation does not need to parse Ma
 - `ready` — the collection threshold has been met and the saved plan is ready for evaluation.
 
 The plan also exposes `planned_experiments`, `collecting_experiments`, and `ready_experiments` totals.
+
+`next_action` turns those states into an executable instruction for another agent or CI job:
+
+- `collect_paired_tasks` with `paired_tasks_needed` while evidence is incomplete;
+- `evaluate_saved_plan` when the collection threshold has been reached.
 
 ## Evaluate a fixed experiment plan
 
@@ -95,6 +101,7 @@ For every planned pair the evaluator:
 - uses the cost and latency sensitivities saved in the experiment plan rather than whatever the current workload happens to be later;
 - exposes `decision`, `decision_basis`, `winner_side`, the winning configuration when one exists, and `policy_ready`;
 - exposes a low/medium/high confidence band plus a numeric confidence score, explicitly labeled as a **heuristic evidence-strength indicator, not a probability or p-value**;
+- exposes a machine-readable `next_action` for the current evaluation state;
 - refuses to become policy-ready until the experiment has at least the required paired-task threshold.
 
 ### Evaluation lifecycle
@@ -108,6 +115,15 @@ Evaluation continues the same machine-readable state model:
 - `tradeoff` — the threshold is met but secondary evidence conflicts, so forcing a winner would hide a real cost/quality/retry trade-off.
 
 The evaluation report includes `status_counts` for all five states. `ready` does **not** mean “adopt A”; it means the experiment has enough paired evidence to inspect, but no directional winner was justified by the evaluator.
+
+The evaluator maps those states to explicit next actions:
+
+- `planned` / `collecting` → `collect_paired_tasks` with an exact remaining count;
+- `decided` → `review_winner_and_rerun_router` and the winning side;
+- `tradeoff` → `review_tradeoff_or_collect_more`;
+- `ready` with no directional winner → `review_tie_or_collect_more`.
+
+These actions are advisory only. The evaluator never modifies routing policy automatically.
 
 ### Decision hierarchy
 
@@ -169,7 +185,7 @@ The report still shows partial progress. For each observed configuration it calc
 6. Record/import both outcomes with the same category and task ID.
 7. Repeat on at least three comparable tasks before using latency/cost differences.
 8. Run `experiment-evaluate` against the saved plan JSON.
-9. Use the lifecycle status to decide whether to collect more evidence, inspect a trade-off, or treat the comparison as decided.
+9. Follow `next_action` to collect more evidence, inspect a trade-off/tie, or review a directional winner and re-run routing.
 10. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
 
 Do not optimize for token count alone. Token/cache/Hive-credit telemetry is retained for diagnostics, but it currently has no routing-score effect. A configuration that spends more tokens but succeeds more reliably can still be the better choice.
