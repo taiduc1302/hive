@@ -5,7 +5,7 @@ on:
   push:
     paths:
       - "tools/ai_model_advisor/**"
-      - "tests/test_ai_model_advisor.py"
+      - "tests/test_ai_model_advisor*.py"
       - "skills/ai-model-advisor/**"
       - "docs/AI_MODEL_ADVISOR.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
@@ -31,10 +31,10 @@ jobs:
         run: python -m pip install pytest ruff
 
       - name: Lint advisor files
-        run: ruff check tools/ai_model_advisor tests/test_ai_model_advisor.py
+        run: ruff check tools/ai_model_advisor tests/test_ai_model_advisor*.py
 
       - name: Run advisor tests
-        run: python -m pytest tests/test_ai_model_advisor.py
+        run: python -m pytest tests/test_ai_model_advisor*.py
 
       - name: Restore previous source baseline
         uses: actions/cache/restore@v4
