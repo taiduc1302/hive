@@ -12,14 +12,16 @@ from .feedback import FeedbackStore, UsageRecord
 
 RunnerExecutor = Callable[[dict[str, Any]], dict[str, Any]]
 _VALID_OUTCOMES = {"success", "partial", "failure"}
+_CONFIG_KEYS = ("provider", "model_id", "effort", "execution_mode")
+_RUNNER_SCHEMA_VERSION = 1
 
 
 class ExperimentRunnerError(ValueError):
-    """Raised when a saved experiment or runner result is unsafe to use."""
+    """Raised when a saved experiment or caller input is unsafe to use."""
 
 
 class RunnerInfrastructureError(RuntimeError):
-    """Raised when the execution adapter fails before producing valid evidence."""
+    """Raised when the execution adapter fails before producing trustworthy evidence."""
 
 
 @dataclass(frozen=True)
@@ -109,10 +111,10 @@ def _config_for_side(pair: dict[str, Any], side: str) -> dict[str, Any]:
         raise ExperimentRunnerError(f"Unknown experiment side: {side}")
     if not isinstance(config, dict):
         raise ExperimentRunnerError(f"Experiment side {side} must be a configuration object")
-    for key in ("provider", "model_id", "effort", "execution_mode"):
+    for key in _CONFIG_KEYS:
         if not config.get(key):
             raise ExperimentRunnerError(f"Experiment side {side} is missing {key!r}")
-    return config
+    return {key: config[key] for key in _CONFIG_KEYS}
 
 
 def runner_payload(
@@ -122,22 +124,33 @@ def runner_payload(
     task_id: str,
     task: str,
 ) -> dict[str, Any]:
-    config = _config_for_side(pair, side)
     return {
-        "schema_version": 1,
+        "schema_version": _RUNNER_SCHEMA_VERSION,
         "experiment_id": experiment_id,
         "side": side,
         "category": pair["category"],
         "kind": pair["kind"],
         "task_id": task_id,
         "task": task,
-        "configuration": {
-            "provider": config["provider"],
-            "model_id": config["model_id"],
-            "effort": config["effort"],
-            "execution_mode": config["execution_mode"],
-        },
+        "configuration": _config_for_side(pair, side),
     }
+
+
+def _validate_adapter_identity(result: dict[str, Any], expected: dict[str, Any]) -> None:
+    if result.get("schema_version") != _RUNNER_SCHEMA_VERSION:
+        raise RunnerInfrastructureError(
+            f"runner result schema_version must be {_RUNNER_SCHEMA_VERSION}"
+        )
+    applied = result.get("applied_configuration")
+    if not isinstance(applied, dict):
+        raise RunnerInfrastructureError(
+            "runner result must echo applied_configuration before evidence can be trusted"
+        )
+    normalized = {key: applied.get(key) for key in _CONFIG_KEYS}
+    if normalized != expected:
+        raise RunnerInfrastructureError(
+            "runner applied_configuration does not match the saved experiment configuration"
+        )
 
 
 def _optional_number(result: dict[str, Any], key: str) -> float | None:
@@ -145,7 +158,7 @@ def _optional_number(result: dict[str, Any], key: str) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ExperimentRunnerError(f"runner result {key} must be numeric")
+        raise RunnerInfrastructureError(f"runner result {key} must be numeric")
     return float(value)
 
 
@@ -154,7 +167,7 @@ def _optional_int(result: dict[str, Any], key: str) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ExperimentRunnerError(f"runner result {key} must be an integer")
+        raise RunnerInfrastructureError(f"runner result {key} must be an integer")
     return value
 
 
@@ -167,24 +180,30 @@ def result_to_record(
     measured_latency_seconds: float | None = None,
 ) -> UsageRecord:
     if not isinstance(result, dict):
-        raise ExperimentRunnerError("runner result must be a JSON object")
+        raise RunnerInfrastructureError("runner result must be a JSON object")
+    expected_config = _config_for_side(pair, side)
+    _validate_adapter_identity(result, expected_config)
+
     outcome = result.get("outcome")
     if outcome not in _VALID_OUTCOMES:
-        raise ExperimentRunnerError("runner result outcome must be success, partial, or failure")
+        raise RunnerInfrastructureError(
+            "runner result outcome must be success, partial, or failure"
+        )
     retries = result.get("retries", 0)
     if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
-        raise ExperimentRunnerError("runner result retries must be a non-negative integer")
+        raise RunnerInfrastructureError(
+            "runner result retries must be a non-negative integer"
+        )
 
     latency = _optional_number(result, "latency_seconds")
     if latency is None:
         latency = measured_latency_seconds
-    config = _config_for_side(pair, side)
     source_id = f"benchmark:{experiment_id}:{task_id}:{side.lower()}"
     return UsageRecord(
-        provider=str(config["provider"]),
-        model_id=str(config["model_id"]),
-        effort=str(config["effort"]),
-        execution_mode=str(config["execution_mode"]),
+        provider=str(expected_config["provider"]),
+        model_id=str(expected_config["model_id"]),
+        effort=str(expected_config["effort"]),
+        execution_mode=str(expected_config["execution_mode"]),
         outcome=str(outcome),
         retries=retries,
         latency_seconds=latency,
@@ -345,7 +364,8 @@ def experiment_run_markdown(report: PairRunReport, *, applied: bool) -> str:
             "",
             (
                 "Both sides were validated before feedback append. Adapter timeout, launch failure, "
-                "non-zero exit, or malformed JSON is treated as infrastructure failure rather than model failure."
+                "non-zero exit, malformed JSON, or configuration-echo mismatch is treated as "
+                "infrastructure failure rather than model failure."
             ),
             "",
         ]
@@ -354,4 +374,8 @@ def experiment_run_markdown(report: PairRunReport, *, applied: bool) -> str:
 
 
 def pair_run_json(report: PairRunReport, *, applied: bool) -> dict[str, Any]:
-    return {**asdict(report), "records": [record.as_dict() for record in report.records], "applied": applied}
+    return {
+        **asdict(report),
+        "records": [record.as_dict() for record in report.records],
+        "applied": applied,
+    }
