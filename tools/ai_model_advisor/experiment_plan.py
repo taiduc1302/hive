@@ -219,6 +219,7 @@ def build_experiment_plan(
             {
                 "category": category,
                 "activity_count": workload.activity_count,
+                "workload": workload.as_dict(),
                 "primary": primary.as_dict(),
                 "pairs": pairs,
             }
