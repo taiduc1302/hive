@@ -158,10 +158,172 @@ def test_feedback_jsonl_round_trip(tmp_path):
         outcome="partial",
         retries=1,
         cost_usd=0.42,
+        task_id="estimate-42",
     )
     FeedbackStore.append(path, record)
     loaded = FeedbackStore.load(path)
     assert loaded.records == (record,)
+
+
+def test_paired_efficiency_rewards_lower_cost_and_latency():
+    records: list[UsageRecord] = []
+    for task_id in ("impl-1", "impl-2", "impl-3", "impl-4"):
+        records.extend(
+            [
+                UsageRecord(
+                    provider="openai",
+                    model_id="gpt-5.6-terra",
+                    effort="medium",
+                    execution_mode="single",
+                    outcome="success",
+                    latency_seconds=10,
+                    cost_usd=0.10,
+                    task_category="implementation",
+                    task_id=task_id,
+                ),
+                UsageRecord(
+                    provider="anthropic",
+                    model_id="claude-sonnet-5",
+                    effort="medium",
+                    execution_mode="single",
+                    outcome="success",
+                    latency_seconds=20,
+                    cost_usd=0.20,
+                    task_category="implementation",
+                    task_id=task_id,
+                ),
+            ]
+        )
+
+    feedback = FeedbackStore(records)
+    terra = feedback.efficiency_adjustment(
+        "gpt-5.6-terra",
+        "medium",
+        "single",
+        "implementation",
+        latency_sensitivity=5,
+        cost_sensitivity=5,
+    )
+    sonnet = feedback.efficiency_adjustment(
+        "claude-sonnet-5",
+        "medium",
+        "single",
+        "implementation",
+        latency_sensitivity=5,
+        cost_sensitivity=5,
+    )
+    assert terra > 0
+    assert sonnet < 0
+
+
+def test_efficiency_ignores_unpaired_absolute_metrics():
+    feedback = FeedbackStore(
+        [
+            UsageRecord(
+                provider="openai",
+                model_id="gpt-5.6-terra",
+                effort="medium",
+                execution_mode="single",
+                outcome="success",
+                latency_seconds=3,
+                cost_usd=0.01,
+                task_category="implementation",
+                task_id=f"unpaired-{index}",
+            )
+            for index in range(4)
+        ]
+    )
+    assert (
+        feedback.efficiency_adjustment(
+            "gpt-5.6-terra",
+            "medium",
+            "single",
+            "implementation",
+        )
+        == 0
+    )
+
+
+def test_efficiency_does_not_cross_task_categories():
+    records: list[UsageRecord] = []
+    for task_id in ("shared-1", "shared-2", "shared-3"):
+        records.extend(
+            [
+                UsageRecord(
+                    provider="openai",
+                    model_id="gpt-5.6-terra",
+                    effort="medium",
+                    execution_mode="single",
+                    outcome="success",
+                    latency_seconds=5,
+                    cost_usd=0.05,
+                    task_category="implementation",
+                    task_id=task_id,
+                ),
+                UsageRecord(
+                    provider="anthropic",
+                    model_id="claude-sonnet-5",
+                    effort="medium",
+                    execution_mode="single",
+                    outcome="success",
+                    latency_seconds=15,
+                    cost_usd=0.15,
+                    task_category="research",
+                    task_id=task_id,
+                ),
+            ]
+        )
+    feedback = FeedbackStore(records)
+    assert (
+        feedback.efficiency_adjustment(
+            "gpt-5.6-terra",
+            "medium",
+            "single",
+            "implementation",
+        )
+        == 0
+    )
+
+
+def test_failed_fast_attempt_is_not_rewarded_for_efficiency():
+    records: list[UsageRecord] = []
+    for task_id in ("failure-1", "failure-2", "failure-3"):
+        records.extend(
+            [
+                UsageRecord(
+                    provider="openai",
+                    model_id="gpt-5.6-terra",
+                    effort="medium",
+                    execution_mode="single",
+                    outcome="failure",
+                    latency_seconds=1,
+                    cost_usd=0.01,
+                    task_category="implementation",
+                    task_id=task_id,
+                ),
+                UsageRecord(
+                    provider="anthropic",
+                    model_id="claude-sonnet-5",
+                    effort="medium",
+                    execution_mode="single",
+                    outcome="success",
+                    latency_seconds=20,
+                    cost_usd=0.20,
+                    task_category="implementation",
+                    task_id=task_id,
+                ),
+            ]
+        )
+    feedback = FeedbackStore(records)
+    assert (
+        feedback.efficiency_adjustment(
+            "gpt-5.6-terra",
+            "medium",
+            "single",
+            "implementation",
+        )
+        == 0
+    )
 
 
 def test_source_scan_detects_signal_change_against_saved_baseline(tmp_path, monkeypatch):
