@@ -32,7 +32,10 @@ def _successful_session(root: Path, agent: str, session_id: str, execution_id: s
                     "model": "openai/gpt-5.6-terra",
                     "input_tokens": 20,
                     "output_tokens": 5,
+                    "cached_tokens": 8,
+                    "cache_creation_tokens": 2,
                     "cost_usd": 0.02,
+                    "credits": 0.4,
                 },
             },
             {
@@ -99,6 +102,12 @@ def test_bulk_import_aggregates_sessions_and_namespaces_sources(tmp_path):
     }
     assert all(record.outcome == "success" for record in report.records)
     assert all(record.latency_seconds == 2.0 for record in report.records)
+    assert all(record.input_tokens == 20 for record in report.records)
+    assert all(record.output_tokens == 5 for record in report.records)
+    assert all(record.cached_tokens == 8 for record in report.records)
+    assert all(record.cache_creation_tokens == 2 for record in report.records)
+    assert all(record.cost_usd == 0.02 for record in report.records)
+    assert all(record.credits == 0.4 for record in report.records)
 
 
 def test_bulk_import_can_be_applied_idempotently(tmp_path):
