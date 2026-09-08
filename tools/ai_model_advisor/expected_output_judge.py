@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
 _JUDGE_SCHEMA_VERSION = 1
+_VALID_MODES = {"exact", "strip-exact", "contains", "json-equal"}
+_DEFAULT_MODE = "strip-exact"
+_EXPECTED_FILE_ENV = "AI_MODEL_ADVISOR_EXPECTED_OUTPUT_FILE"
+_MODE_ENV = "AI_MODEL_ADVISOR_EXPECTED_OUTPUT_MODE"
 
 
 class ExpectedOutputJudgeError(ValueError):
@@ -26,7 +31,21 @@ def _expected_text(args: argparse.Namespace) -> str:
         return Path(args.expected_file).read_text(encoding="utf-8")
     if args.expected is not None:
         return args.expected
-    raise ExpectedOutputJudgeError("provide --expected or --expected-file")
+    env_file = os.getenv(_EXPECTED_FILE_ENV)
+    if env_file:
+        return Path(env_file).read_text(encoding="utf-8")
+    raise ExpectedOutputJudgeError(
+        f"provide --expected, --expected-file, or {_EXPECTED_FILE_ENV}"
+    )
+
+
+def _mode(args: argparse.Namespace) -> str:
+    mode = args.mode or os.getenv(_MODE_ENV) or _DEFAULT_MODE
+    if mode not in _VALID_MODES:
+        raise ExpectedOutputJudgeError(
+            f"mode must be one of {', '.join(sorted(_VALID_MODES))}"
+        )
+    return mode
 
 
 def _result(outcome: str, note: str) -> dict[str, Any]:
@@ -81,10 +100,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["exact", "strip-exact", "contains", "json-equal"],
-        default="strip-exact",
+        choices=sorted(_VALID_MODES),
+        help=f"Comparison mode; defaults to {_MODE_ENV} or {_DEFAULT_MODE}",
     )
-    expected = parser.add_mutually_exclusive_group(required=True)
+    expected = parser.add_mutually_exclusive_group(required=False)
     expected.add_argument("--expected", help="Expected text; prefer --expected-file for long/private fixtures")
     expected.add_argument("--expected-file", help="UTF-8 expected-output fixture")
     return parser
@@ -99,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         result = judge_expected_output(
             payload,
             expected=_expected_text(args),
-            mode=args.mode,
+            mode=_mode(args),
         )
     except (ExpectedOutputJudgeError, OSError, json.JSONDecodeError) as exc:
         print(f"expected-output judge error: {exc}", file=sys.stderr)
