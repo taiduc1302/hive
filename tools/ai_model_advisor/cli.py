@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .activity import ActivityAnalyzer
 from .feedback import FeedbackStore, UsageRecord
+from .hive_history import history_import_markdown, import_hive_history
 from .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
@@ -153,6 +154,32 @@ def command_feedback_import_hive(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_feedback_import_hive_root(args: argparse.Namespace) -> int:
+    registry = ModelRegistry(args.registry)
+    report = import_hive_history(
+        args.root,
+        registry,
+        task_category=args.task_category,
+        effort=args.effort,
+        execution_mode=args.execution,
+    )
+    append_result = None
+    if args.apply:
+        append_result = append_imported_feedback(args.feedback, report.records)
+
+    markdown = history_import_markdown(report, append_result, applied=args.apply)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        payload = report.as_dict()
+        payload["append"] = asdict(append_result) if append_result else None
+        payload["applied"] = bool(args.apply)
+        _write(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
 def command_scan(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
     previous_baseline = load_baseline(args.baseline)
@@ -242,6 +269,22 @@ def build_parser() -> argparse.ArgumentParser:
     hive_import.add_argument("--output", help="Optional Markdown import report")
     hive_import.add_argument("--json-output")
     hive_import.set_defaults(func=command_feedback_import_hive)
+
+    hive_root = sub.add_parser("feedback-import-hive-root")
+    hive_root.add_argument("--root", required=True, help="Hive storage root to scan recursively")
+    hive_root.add_argument("--feedback", required=True, help="Advisor feedback JSONL")
+    hive_root.add_argument("--registry")
+    hive_root.add_argument("--task-category")
+    hive_root.add_argument("--effort", default="observed")
+    hive_root.add_argument("--execution", default="hive_agent_loop")
+    hive_root.add_argument(
+        "--apply",
+        action="store_true",
+        help="Append eligible observations; without this flag the command is preview-only",
+    )
+    hive_root.add_argument("--output", help="Optional Markdown discovery/import report")
+    hive_root.add_argument("--json-output")
+    hive_root.set_defaults(func=command_feedback_import_hive_root)
 
     scan = sub.add_parser("scan")
     scan.add_argument("--registry")
