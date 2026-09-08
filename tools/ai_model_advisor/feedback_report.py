@@ -4,10 +4,13 @@ from collections import Counter, defaultdict
 from statistics import median
 from typing import Any
 
-from .feedback import FeedbackStore, UsageRecord
-
-_EXACT_MIN = 3
-_CROSS_CONFIG_MIN = 6
+from .feedback import (
+    CROSS_CONFIG_FEEDBACK_MIN,
+    EXACT_FEEDBACK_MIN,
+    PAIRED_EFFICIENCY_MIN,
+    FeedbackStore,
+    UsageRecord,
+)
 
 
 def _category(record: UsageRecord) -> str:
@@ -68,9 +71,9 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
                 "median_cost_usd": _median(costs),
                 "unique_task_ids": len(task_ids),
                 "unique_source_ids": len(source_ids),
-                "exact_quality_eligible": exact_count >= _EXACT_MIN,
+                "exact_quality_eligible": exact_count >= EXACT_FEEDBACK_MIN,
                 "model_category_observations": category_model_count,
-                "cross_config_eligible": category_model_count >= _CROSS_CONFIG_MIN,
+                "cross_config_eligible": category_model_count >= CROSS_CONFIG_FEEDBACK_MIN,
                 "quality_adjustment": store.adjustment(
                     model_id,
                     effort,
@@ -78,7 +81,7 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
                     task_category,
                 ),
                 "paired_comparable_tasks": comparable_tasks,
-                "paired_efficiency_eligible": comparable_tasks >= _EXACT_MIN,
+                "paired_efficiency_eligible": comparable_tasks >= PAIRED_EFFICIENCY_MIN,
                 "efficiency_adjustment": efficiency_adjustment,
             }
         )
@@ -90,9 +93,9 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
         "unique_task_ids": len({record.task_id for record in store.records if record.task_id}),
         "unique_source_ids": len({record.source_id for record in store.records if record.source_id}),
         "thresholds": {
-            "exact_quality_observations": _EXACT_MIN,
-            "cross_config_observations": _CROSS_CONFIG_MIN,
-            "paired_efficiency_tasks": _EXACT_MIN,
+            "exact_quality_observations": EXACT_FEEDBACK_MIN,
+            "cross_config_observations": CROSS_CONFIG_FEEDBACK_MIN,
+            "paired_efficiency_tasks": PAIRED_EFFICIENCY_MIN,
         },
         "rows": rows,
     }
