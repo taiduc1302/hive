@@ -32,25 +32,31 @@ def _implementation_category(plan):
     return next(item for item in plan["categories"] if item["category"] == "implementation")
 
 
-def test_experiment_plan_proposes_model_and_same_model_configuration_pairs():
+def test_experiment_plan_isolates_model_effort_and_execution_pairs():
     plan = _plan()
     category = _implementation_category(plan)
     by_kind = {pair["kind"]: pair for pair in category["pairs"]}
 
-    assert {"model", "configuration"} <= set(by_kind)
+    assert {"model", "effort", "execution"} <= set(by_kind)
     model_pair = by_kind["model"]
-    config_pair = by_kind["configuration"]
+    effort_pair = by_kind["effort"]
+    execution_pair = by_kind["execution"]
 
     assert model_pair["primary"]["model_id"] != model_pair["challenger"]["model_id"]
-    assert config_pair["primary"]["model_id"] == config_pair["challenger"]["model_id"]
+
+    assert effort_pair["primary"]["model_id"] == effort_pair["challenger"]["model_id"]
+    assert effort_pair["primary"]["execution_mode"] == effort_pair["challenger"]["execution_mode"]
+    assert effort_pair["primary"]["effort"] != effort_pair["challenger"]["effort"]
+
+    assert execution_pair["primary"]["model_id"] == execution_pair["challenger"]["model_id"]
+    assert execution_pair["primary"]["effort"] == execution_pair["challenger"]["effort"]
     assert (
-        config_pair["primary"]["effort"],
-        config_pair["primary"]["execution_mode"],
-    ) != (
-        config_pair["challenger"]["effort"],
-        config_pair["challenger"]["execution_mode"],
+        execution_pair["primary"]["execution_mode"]
+        != execution_pair["challenger"]["execution_mode"]
     )
+
     assert all(pair["paired_tasks_remaining"] == 3 for pair in by_kind.values())
+    assert [pair["priority"] for pair in category["pairs"]] == [1, 2, 3]
 
 
 def test_experiment_ids_are_deterministic_for_same_ranking():
