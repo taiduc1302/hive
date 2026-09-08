@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +77,13 @@ def discover_hive_session_traces(root: str | Path) -> tuple[HiveSessionTrace, ..
     return tuple(traces)
 
 
+def _namespace_record(record: UsageRecord, session_id: str) -> UsageRecord:
+    if not record.source_id:
+        return record
+    suffix = record.source_id.removeprefix("hive:")
+    return replace(record, source_id=f"hive:{session_id}:{suffix}")
+
+
 def import_hive_history(
     root: str | Path,
     registry: ModelRegistry,
@@ -103,7 +110,7 @@ def import_hive_history(
             effort=effort,
             execution_mode=execution_mode,
         )
-        records.extend(report.records)
+        records.extend(_namespace_record(record, session.session_id) for record in report.records)
         for key in counters:
             counters[key] += int(getattr(report, key))
 
