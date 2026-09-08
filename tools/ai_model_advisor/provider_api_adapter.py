@@ -219,6 +219,15 @@ def _nonnegative_int(value: Any) -> int | None:
     return value
 
 
+def _anthropic_normalized_usage(usage: dict[str, Any]) -> tuple[int | None, int | None, int | None]:
+    uncached = _nonnegative_int(usage.get("input_tokens"))
+    cache_read = _nonnegative_int(usage.get("cache_read_input_tokens"))
+    cache_creation = _nonnegative_int(usage.get("cache_creation_input_tokens"))
+    known_parts = [value for value in (uncached, cache_read, cache_creation) if value is not None]
+    total_input = sum(known_parts) if known_parts else None
+    return total_input, cache_read, cache_creation
+
+
 def parse_provider_response(
     request: ProviderRequest,
     response: dict[str, Any],
@@ -254,6 +263,7 @@ def parse_provider_response(
         if response.get("type") == "error" or response.get("error"):
             raise ProviderAdapterError("Anthropic response contains an error object")
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        input_tokens, cached_tokens, cache_creation_tokens = _anthropic_normalized_usage(usage)
         result = {
             "schema_version": _RUNNER_SCHEMA_VERSION,
             "applied_configuration": request.configuration,
@@ -262,10 +272,10 @@ def parse_provider_response(
             "provider_response_id": response.get("id"),
             "provider_status": response.get("stop_reason"),
             "resolved_model": response.get("model"),
-            "input_tokens": _nonnegative_int(usage.get("input_tokens")),
+            "input_tokens": input_tokens,
             "output_tokens": _nonnegative_int(usage.get("output_tokens")),
-            "cached_tokens": _nonnegative_int(usage.get("cache_read_input_tokens")),
-            "cache_creation_tokens": _nonnegative_int(usage.get("cache_creation_input_tokens")),
+            "cached_tokens": cached_tokens,
+            "cache_creation_tokens": cache_creation_tokens,
             "note": "direct Anthropic transport completed; outcome requires deterministic judge",
         }
 
