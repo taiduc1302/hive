@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .activity import ActivityAnalyzer
+from .experiment_evaluate import evaluate_experiment_plan, experiment_evaluation_markdown
 from .experiment_plan import build_experiment_plan, experiment_plan_markdown
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
@@ -125,6 +126,17 @@ def command_experiment_plan(args: argparse.Namespace) -> int:
     if args.json_output:
         payload = {"registry_as_of": registry.as_of, **plan}
         _write(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
+def command_experiment_evaluate(args: argparse.Namespace) -> int:
+    plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+    if not isinstance(plan, dict):
+        raise ValueError("Experiment plan root must be a JSON object")
+    report = evaluate_experiment_plan(plan, FeedbackStore.load(args.feedback))
+    _write(args.output, experiment_evaluation_markdown(report))
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     return 0
 
 
@@ -293,6 +305,13 @@ def build_parser() -> argparse.ArgumentParser:
     experiment_plan.add_argument("--output", required=True)
     experiment_plan.add_argument("--json-output")
     experiment_plan.set_defaults(func=command_experiment_plan)
+
+    experiment_evaluate = sub.add_parser("experiment-evaluate")
+    experiment_evaluate.add_argument("--plan", required=True, help="JSON from experiment-plan")
+    experiment_evaluate.add_argument("--feedback", required=True)
+    experiment_evaluate.add_argument("--output", required=True)
+    experiment_evaluate.add_argument("--json-output")
+    experiment_evaluate.set_defaults(func=command_experiment_evaluate)
 
     feedback = sub.add_parser("feedback-add")
     feedback.add_argument("--feedback", required=True)
