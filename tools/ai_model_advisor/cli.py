@@ -111,6 +111,7 @@ def command_feedback_add(args: argparse.Namespace) -> int:
         latency_seconds=args.latency_seconds,
         cost_usd=args.cost_usd,
         task_category=args.task_category,
+        task_id=args.task_id,
         note=args.note or "",
     )
     FeedbackStore.append(args.feedback, record)
@@ -182,6 +183,10 @@ def build_parser() -> argparse.ArgumentParser:
     feedback.add_argument("--latency-seconds", type=float)
     feedback.add_argument("--cost-usd", type=float)
     feedback.add_argument("--task-category")
+    feedback.add_argument(
+        "--task-id",
+        help="Stable ID shared by multiple model/config attempts of the same task",
+    )
     feedback.add_argument("--note")
     feedback.set_defaults(func=command_feedback_add)
 
