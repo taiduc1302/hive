@@ -1,5 +1,6 @@
 from tools.ai_model_advisor.feedback import (
     CROSS_CONFIG_FEEDBACK_MIN,
+    CROSS_CONFIG_WEIGHT,
     EXACT_FEEDBACK_MIN,
     PAIRED_EFFICIENCY_MIN,
     FeedbackStore,
@@ -24,8 +25,11 @@ def test_feedback_audit_thresholds_match_router_policy():
     assert audit["thresholds"] == {
         "exact_quality_observations": EXACT_FEEDBACK_MIN,
         "cross_config_observations": CROSS_CONFIG_FEEDBACK_MIN,
+        "cross_config_weight": CROSS_CONFIG_WEIGHT,
         "paired_efficiency_tasks": PAIRED_EFFICIENCY_MIN,
     }
+    markdown = feedback_audit_markdown(audit)
+    assert "35%" in markdown
 
 
 def test_feedback_audit_reports_exact_and_cross_config_thresholds():
