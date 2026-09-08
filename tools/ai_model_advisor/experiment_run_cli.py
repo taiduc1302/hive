@@ -55,7 +55,9 @@ def _with_outcome_judge(executor: RunnerExecutor, judge: OutcomeJudge | None) ->
         return executor
 
     def execute(payload: dict[str, Any]) -> dict[str, Any]:
-        adapter_result = executor(payload)
+        adapter_payload = dict(payload)
+        adapter_payload["acceptance_mode"] = "external_judge"
+        adapter_result = executor(adapter_payload)
         return apply_outcome_judge(payload, adapter_result, judge)
 
     return execute
