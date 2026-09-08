@@ -10,6 +10,7 @@ from .activity import ActivityAnalyzer
 from .experiment_evaluate import evaluate_experiment_plan, experiment_evaluation_markdown
 from .experiment_impact import build_experiment_impact, experiment_impact_markdown
 from .experiment_plan import build_experiment_plan, experiment_plan_markdown
+from .experiment_run_cli import main as experiment_run_main
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
@@ -128,6 +129,38 @@ def command_experiment_plan(args: argparse.Namespace) -> int:
         payload = {"registry_as_of": registry.as_of, **plan}
         _write(args.json_output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return 0
+
+
+def command_experiment_run(args: argparse.Namespace) -> int:
+    forwarded = [
+        "--plan",
+        args.plan,
+        "--experiment-id",
+        args.experiment_id,
+        "--feedback",
+        args.feedback,
+        "--order",
+        args.order,
+        "--timeout-seconds",
+        str(args.timeout_seconds),
+    ]
+    if args.task is not None:
+        forwarded.extend(["--task", args.task])
+    if args.task_file is not None:
+        forwarded.extend(["--task-file", args.task_file])
+    if args.task_id:
+        forwarded.extend(["--task-id", args.task_id])
+    if args.allow_ready:
+        forwarded.append("--allow-ready")
+    if args.apply:
+        forwarded.append("--apply")
+    if args.output:
+        forwarded.extend(["--output", args.output])
+    if args.json_output:
+        forwarded.extend(["--json-output", args.json_output])
+    if args.runner:
+        forwarded.extend(["--runner", *args.runner])
+    return experiment_run_main(forwarded)
 
 
 def command_experiment_evaluate(args: argparse.Namespace) -> int:
@@ -325,6 +358,27 @@ def build_parser() -> argparse.ArgumentParser:
     experiment_plan.add_argument("--output", required=True)
     experiment_plan.add_argument("--json-output")
     experiment_plan.set_defaults(func=command_experiment_plan)
+
+    experiment_run = sub.add_parser("experiment-run")
+    experiment_run.add_argument("--plan", required=True, help="JSON from experiment-plan")
+    experiment_run.add_argument("--experiment-id", required=True)
+    experiment_run.add_argument("--feedback", required=True)
+    task_group = experiment_run.add_mutually_exclusive_group(required=True)
+    task_group.add_argument("--task")
+    task_group.add_argument("--task-file")
+    experiment_run.add_argument("--task-id")
+    experiment_run.add_argument("--order", choices=["auto", "ab", "ba"], default="auto")
+    experiment_run.add_argument("--allow-ready", action="store_true")
+    experiment_run.add_argument("--apply", action="store_true")
+    experiment_run.add_argument("--timeout-seconds", type=float, default=1800.0)
+    experiment_run.add_argument("--output")
+    experiment_run.add_argument("--json-output")
+    experiment_run.add_argument(
+        "--runner",
+        nargs=argparse.REMAINDER,
+        help="Adapter argv; place --runner last. Required only with --apply.",
+    )
+    experiment_run.set_defaults(func=command_experiment_run)
 
     experiment_evaluate = sub.add_parser("experiment-evaluate")
     experiment_evaluate.add_argument("--plan", required=True, help="JSON from experiment-plan")
