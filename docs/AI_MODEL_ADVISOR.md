@@ -133,6 +133,21 @@ For every configuration the report shows:
 
 If the feedback store is empty, the report explicitly states that the static registry is driving recommendations. Rows below threshold remain visible as historical evidence but do not independently change routing. This makes every non-zero empirical adjustment traceable to a concrete evidence bucket instead of allowing personalization to become a hidden self-reinforcing signal.
 
+The audit reads the same exported threshold constants used by the router itself. Threshold reporting therefore cannot silently drift away from scoring policy without breaking the regression tests.
+
+### Recommendation score decomposition
+
+Every recommendation exposes the ranking arithmetic in both JSON and Markdown:
+
+- `base_score`: score from registry capabilities, workload fit, speed/cost sensitivity, overkill penalty, and model status before personal evidence;
+- `quality_adjustment`: raw outcome/retry adjustment from eligible personal feedback;
+- `efficiency_adjustment`: raw paired same-task cost/latency adjustment;
+- `raw_empirical_adjustment`: the uncapped sum of quality + efficiency adjustments;
+- `empirical_adjustment`: the delta that was actually applied after the router's empirical cap;
+- `score`: final ranking score.
+
+The invariant is `base_score + empirical_adjustment = score` to the report's rounding precision. If the raw empirical sum exceeds the allowed cap, Markdown shows both the raw and applied values instead of hiding the clipping. This lets an operator trace a ranking change from final model choice back through the exact personal-evidence contribution and then into `feedback-report`'s evidence buckets.
+
 ### Paired cost and latency evidence
 
 Absolute elapsed time and spend are **not** compared across unrelated tasks. A five-second one-line fix is not evidence that a configuration is more efficient than a thirty-minute repository audit.
