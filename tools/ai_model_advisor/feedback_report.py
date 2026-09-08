@@ -6,6 +6,7 @@ from typing import Any
 
 from .feedback import (
     CROSS_CONFIG_FEEDBACK_MIN,
+    CROSS_CONFIG_WEIGHT,
     EXACT_FEEDBACK_MIN,
     PAIRED_EFFICIENCY_MIN,
     FeedbackStore,
@@ -128,6 +129,7 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
         "thresholds": {
             "exact_quality_observations": EXACT_FEEDBACK_MIN,
             "cross_config_observations": CROSS_CONFIG_FEEDBACK_MIN,
+            "cross_config_weight": CROSS_CONFIG_WEIGHT,
             "paired_efficiency_tasks": PAIRED_EFFICIENCY_MIN,
         },
         "rows": rows,
@@ -147,7 +149,11 @@ def feedback_audit_markdown(audit: dict[str, Any]) -> str:
         "## Evidence thresholds",
         "",
         f"- Exact configuration quality: **{audit['thresholds']['exact_quality_observations']} observations**",
-        f"- Same-model cross-config fallback: **{audit['thresholds']['cross_config_observations']} category-compatible observations**",
+        (
+            f"- Same-model cross-config fallback: **{audit['thresholds']['cross_config_observations']} "
+            f"category-compatible observations**, weighted at "
+            f"**{audit['thresholds']['cross_config_weight']:.0%}** of exact evidence"
+        ),
         f"- Paired cost/latency efficiency: **{audit['thresholds']['paired_efficiency_tasks']} comparable task IDs**",
         "",
     ]
@@ -226,6 +232,7 @@ def feedback_audit_markdown(audit: dict[str, Any]) -> str:
             (
                 "A non-zero empirical adjustment should be explainable by this report. "
                 "Rows below threshold remain historical evidence but do not independently change routing. "
+                "Cross-config fallback is intentionally weaker than exact configuration evidence. "
                 "Token/cache/credit telemetry is diagnostic-only and currently has no scoring effect."
             ),
             "",
