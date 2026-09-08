@@ -1,4 +1,4 @@
-# AI Model Advisor — Experiment Readiness
+# AI Model Advisor — Controlled Experiments
 
 The Advisor can learn from ordinary Hive history, but historical observations do not prove which exact reasoning effort or orchestration mode caused a result. Use controlled repeated tasks when you want the router to learn configuration-level preferences instead of only model-level tendencies.
 
@@ -15,9 +15,40 @@ The report uses the same thresholds as the live router:
 
 - **3 exact observations** before one exact model + effort + execution configuration can independently change quality scoring;
 - **6 category-compatible observations** before same-model cross-config fallback can transfer quality evidence;
+- cross-config fallback is deliberately discounted to **35%** of equivalent exact evidence;
 - **3 successful comparable task IDs** before paired cost/latency efficiency can change routing.
 
 These values are imported from the router policy constants rather than duplicated in the report.
+
+## Generate the next comparisons
+
+`feedback-readiness` answers **what evidence is missing**. `experiment-plan` answers **what to compare next** based on current workload routing.
+
+```bash
+python -m tools.ai_model_advisor.cli experiment-plan \
+  --input tools/ai_model_advisor/sample_activity.json \
+  --feedback ~/.hive/model-feedback.jsonl \
+  --output /tmp/model-experiments.md \
+  --json-output /tmp/model-experiments.json
+```
+
+The command accepts the same explicit activity sources as the rest of the Advisor (`--input`, `--chatgpt-export`, or `--github-user`) plus optional provider filters.
+
+For each recognized task category it proposes up to two controlled comparison lines:
+
+1. **Model comparison** — the current best configuration against the strongest current configuration from a different model.
+2. **Configuration comparison** — the current best configuration against the next-best effort/execution configuration of the same model.
+
+Each pair contains:
+
+- a deterministic experiment ID based on category and both configurations;
+- the exact A and B model/effort/execution settings;
+- a shared `task_id` template;
+- successful paired task IDs already present in feedback;
+- paired tasks still needed before cost/latency efficiency becomes active;
+- the rationale for the comparison.
+
+The planner never calls a provider and never writes feedback. It is a controlled experiment manifest, not an autonomous benchmark executor.
 
 ## Historical vs controlled evidence
 
@@ -59,12 +90,13 @@ The report still shows partial progress. For each observed configuration it calc
 ## Suggested experiment loop
 
 1. Import existing Hive history and run `feedback-report`.
-2. Run `feedback-readiness` and choose a category with incomplete evidence.
-3. Pick one repeatable real task or benchmark and assign a stable `task_id`.
-4. Run it with two configurations you genuinely might choose between.
-5. Record/import both outcomes with the same category and task ID.
-6. Repeat on at least three comparable tasks before using latency/cost differences.
-7. Re-run `feedback-report`, `feedback-readiness`, and the routing matrix.
+2. Run `feedback-readiness` to see which evidence buckets are incomplete.
+3. Run `experiment-plan` on the activity source you actually want to optimize.
+4. Pick a proposed pair and use its shared `task_id` template for one real repeatable task.
+5. Run the same logical task under both proposed configurations.
+6. Record/import both outcomes with the same category and task ID.
+7. Repeat on at least three comparable tasks before using latency/cost differences.
+8. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
 
 Do not optimize for token count alone. Token/cache/Hive-credit telemetry is retained for diagnostics, but it currently has no routing-score effect. A configuration that spends more tokens but succeeds more reliably can still be the better choice.
 
