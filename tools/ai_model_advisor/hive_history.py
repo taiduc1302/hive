@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .feedback import UsageRecord
-from .hive_trace import HiveTraceImportReport, import_hive_trace
+from .hive_trace import FeedbackAppendResult, HiveTraceImportReport, import_hive_trace
 from .registry import ModelRegistry
 
 
@@ -112,3 +112,43 @@ def import_hive_history(
         records=tuple(records),
         **counters,
     )
+
+
+def history_import_markdown(
+    report: HiveHistoryImportReport,
+    append_result: FeedbackAppendResult | None = None,
+    applied: bool = False,
+) -> str:
+    lines = [
+        "# Hive history feedback import",
+        "",
+        f"Sessions scanned: **{len(report.sessions)}**",
+        f"Eligible observations: **{len(report.records)}**",
+        f"Mode: **{'apply' if applied else 'preview'}**",
+    ]
+    if append_result is not None:
+        lines.extend(
+            [
+                f"Appended: **{append_result.appended}**",
+                f"Already imported: **{append_result.duplicates}**",
+            ]
+        )
+    lines.extend(
+        [
+            f"Skipped mixed-model nodes: **{report.skipped_mixed_models}**",
+            f"Skipped unknown models: **{report.skipped_unknown_models}**",
+            f"Skipped unknown outcomes: **{report.skipped_unknown_outcomes}**",
+            f"Ambiguous runtime-detail joins: **{report.ambiguous_runtime_details}**",
+            f"Corrupt JSONL lines ignored: **{report.corrupt_lines}**",
+            "",
+            "Preview is the default. Use `--apply` only after reviewing the discovered sessions and skip counts.",
+            "",
+        ]
+    )
+    if report.sessions:
+        lines.extend(["## Sessions", ""])
+        for session in report.sessions:
+            detail_status = "details" if session.details_path else "events only"
+            lines.append(f"- `{session.session_id}` — {detail_status}")
+        lines.append("")
+    return "\n".join(lines)
