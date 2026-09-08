@@ -53,6 +53,36 @@ Each pair contains:
 
 The planner never calls a provider and never writes feedback. It is a controlled experiment manifest, not an autonomous benchmark executor.
 
+## Evaluate a fixed experiment plan
+
+Keep the JSON created by `experiment-plan`. It freezes the exact A/B configurations so the comparison cannot silently change later when the router's ranking changes.
+
+After recording or importing attempts whose `task_id` values follow the plan's template, evaluate the same plan:
+
+```bash
+python -m tools.ai_model_advisor.cli experiment-evaluate \
+  --plan /tmp/model-experiments.json \
+  --feedback ~/.hive/model-feedback.jsonl \
+  --output /tmp/model-experiment-results.md \
+  --json-output /tmp/model-experiment-results.json
+```
+
+`experiment-evaluate` is descriptive only. It never writes routing policy or modifies feedback.
+
+For every planned pair it:
+
+- matches only the exact A/B model + effort + execution configurations from the saved plan;
+- matches only task IDs under that experiment's deterministic task-ID prefix;
+- requires one unambiguous record per side for a task to become a complete pair;
+- excludes duplicate attempts for a side as ambiguous instead of silently choosing one;
+- reports one-sided/incomplete tasks separately;
+- reports quality, retries, median cost, and median latency for the complete paired tasks;
+- refuses to suggest a winner before the minimum three paired tasks are complete.
+
+Quality has priority. If one side has a higher mean outcome score (`success=1`, `partial=0.5`, `failure=0`), the evaluator reports a quality lead even if the other side was cheaper. When quality is tied, retries/cost/latency can provide a secondary efficiency lead. If those secondary signals disagree, the evaluator reports a trade-off rather than forcing a winner.
+
+This evaluation does not replace the live feedback scorer. It exists to make controlled experiments interpretable before you decide whether the accumulated evidence is trustworthy enough to influence normal routing.
+
 ## Historical vs controlled evidence
 
 Bulk Hive imports normally use:
@@ -94,12 +124,13 @@ The report still shows partial progress. For each observed configuration it calc
 
 1. Import existing Hive history and run `feedback-report`.
 2. Run `feedback-readiness` to see which evidence buckets are incomplete.
-3. Run `experiment-plan` on the activity source you actually want to optimize.
+3. Run `experiment-plan` on the activity source you actually want to optimize and keep its JSON output.
 4. Pick a proposed pair and use its shared `task_id` template for one real repeatable task.
 5. Run the same logical task under both proposed configurations.
 6. Record/import both outcomes with the same category and task ID.
 7. Repeat on at least three comparable tasks before using latency/cost differences.
-8. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
+8. Run `experiment-evaluate` against the saved plan JSON.
+9. Re-run `feedback-report`, `feedback-readiness`, `experiment-plan`, and the routing matrix.
 
 Do not optimize for token count alone. Token/cache/Hive-credit telemetry is retained for diagnostics, but it currently has no routing-score effect. A configuration that spends more tokens but succeeds more reliably can still be the better choice.
 
