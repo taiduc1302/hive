@@ -184,7 +184,8 @@ class RecommendationEngine:
                 -10.0,
                 min(10.0, quality_adjustment + efficiency_adjustment),
             )
-            score = self._base_score(model, workload) + feedback_adjustment
+            base_score = self._base_score(model, workload)
+            score = base_score + feedback_adjustment
             reasons, tradeoffs = self._explain(
                 model,
                 workload,
@@ -205,6 +206,9 @@ class RecommendationEngine:
                     confidence=0.0,
                     reasons=reasons,
                     tradeoffs=tradeoffs,
+                    base_score=round(base_score, 2),
+                    quality_adjustment=quality_adjustment,
+                    efficiency_adjustment=efficiency_adjustment,
                 )
             )
         scored.sort(key=lambda item: item.score, reverse=True)
