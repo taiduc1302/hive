@@ -18,18 +18,34 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
 
-def _turn(execution_id: str, node_id: str, model: str, cost: float) -> dict:
+def _turn(
+    execution_id: str,
+    node_id: str,
+    model: str,
+    cost: float,
+    *,
+    input_tokens: int = 100,
+    output_tokens: int = 20,
+    cached_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+    credits: float | None = None,
+) -> dict:
+    data = {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cached_tokens": cached_tokens,
+        "cache_creation_tokens": cache_creation_tokens,
+        "cost_usd": cost,
+    }
+    if credits is not None:
+        data["credits"] = credits
     return {
         "type": "llm_turn_complete",
         "stream_id": "queen",
         "node_id": node_id,
         "execution_id": execution_id,
-        "data": {
-            "model": model,
-            "input_tokens": 100,
-            "output_tokens": 20,
-            "cost_usd": cost,
-        },
+        "data": data,
     }
 
 
@@ -39,7 +55,15 @@ def test_hive_trace_import_combines_cost_with_runtime_outcome(tmp_path):
     _write_jsonl(
         events,
         [
-            _turn("exec-1", "worker-a", "openai/gpt-5.6-terra", 0.12),
+            _turn(
+                "exec-1",
+                "worker-a",
+                "openai/gpt-5.6-terra",
+                0.12,
+                cached_tokens=40,
+                cache_creation_tokens=10,
+                credits=0.6,
+            ),
             {
                 "type": "node_retry",
                 "stream_id": "worker:1",
@@ -47,7 +71,15 @@ def test_hive_trace_import_combines_cost_with_runtime_outcome(tmp_path):
                 "execution_id": "exec-1",
                 "data": {"retry_count": 1},
             },
-            _turn("exec-1", "worker-a", "openai/gpt-5.6-terra", 0.08),
+            _turn(
+                "exec-1",
+                "worker-a",
+                "openai/gpt-5.6-terra",
+                0.08,
+                cached_tokens=60,
+                cache_creation_tokens=5,
+                credits=0.4,
+            ),
             {
                 "type": "judge_verdict",
                 "stream_id": "worker:1",
@@ -87,6 +119,11 @@ def test_hive_trace_import_combines_cost_with_runtime_outcome(tmp_path):
     assert record.retries == 2
     assert record.latency_seconds == 12.5
     assert record.cost_usd == pytest.approx(0.20)
+    assert record.input_tokens == 200
+    assert record.output_tokens == 40
+    assert record.cached_tokens == 100
+    assert record.cache_creation_tokens == 15
+    assert record.credits == pytest.approx(1.0)
     assert record.task_category == "implementation"
     assert record.effort == "observed"
     assert record.execution_mode == "hive_agent_loop"
