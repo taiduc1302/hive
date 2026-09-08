@@ -1,4 +1,10 @@
-from tools.ai_model_advisor.feedback import FeedbackStore, UsageRecord
+from tools.ai_model_advisor.feedback import (
+    CROSS_CONFIG_FEEDBACK_MIN,
+    EXACT_FEEDBACK_MIN,
+    PAIRED_EFFICIENCY_MIN,
+    FeedbackStore,
+    UsageRecord,
+)
 from tools.ai_model_advisor.feedback_report import (
     build_feedback_audit,
     feedback_audit_markdown,
@@ -11,6 +17,15 @@ def test_feedback_audit_explains_empty_history():
     assert audit["rows"] == []
     markdown = feedback_audit_markdown(audit)
     assert "static registry" in markdown
+
+
+def test_feedback_audit_thresholds_match_router_policy():
+    audit = build_feedback_audit(FeedbackStore())
+    assert audit["thresholds"] == {
+        "exact_quality_observations": EXACT_FEEDBACK_MIN,
+        "cross_config_observations": CROSS_CONFIG_FEEDBACK_MIN,
+        "paired_efficiency_tasks": PAIRED_EFFICIENCY_MIN,
+    }
 
 
 def test_feedback_audit_reports_exact_and_cross_config_thresholds():
