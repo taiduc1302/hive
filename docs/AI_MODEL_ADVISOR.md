@@ -50,7 +50,7 @@ The Markdown output includes the primary model/effort/execution configuration pl
 
 Feedback is JSONL and stays local unless the user deliberately commits/uploads it. A record can include outcome (`success`, `partial`, `failure`), retries, latency, cost, task category, a stable task ID, and a note.
 
-The router does **not** react to one-off anecdotes. Fewer than three matching outcome observations have zero scoring effect. Larger samples are shrunk toward neutral and capped so empirical history tunes the registry instead of replacing it.
+The router does **not** react to one-off anecdotes. Three observations are required before an exact model + effort + execution configuration can affect the quality score. Evidence from other effort/execution configurations of the same model is a weaker fallback and is not used until at least six category-compatible observations exist. Larger samples are shrunk toward neutral and capped so empirical history tunes the registry instead of replacing it.
 
 When feedback has a `task_category`, it is scoped to that type of work. For example, repeated success on `repo_review` can improve a model's score for future repository reviews but does not raise that model's score for `implementation`. Older untagged feedback remains a conservative fallback for backward compatibility.
 
