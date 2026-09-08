@@ -26,7 +26,7 @@ If an official source temporarily fails to load, its previous hash is preserved.
 
 ## Privacy boundary
 
-There is no hidden API in this project for reading a user's entire ChatGPT profile/history. The advisor analyzes only data explicitly available to it: a supplied ChatGPT export, generic activity JSON, GitHub events, or explicitly authorized sources.
+There is no hidden API in this project for reading a user's entire ChatGPT profile/history. The advisor analyzes only data explicitly available to it: a supplied ChatGPT export, generic activity JSON, GitHub events, explicitly authorized sources, or local Hive telemetry that the user deliberately points the importer at.
 
 ## CLI
 
@@ -37,6 +37,7 @@ python -m tools.ai_model_advisor.cli matrix --input tools/ai_model_advisor/sampl
 python -m tools.ai_model_advisor.cli matrix --chatgpt-export /path/to/conversations.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personal-routing.md
 python -m tools.ai_model_advisor.cli recommend --profile /tmp/workload.json --feedback ~/.hive/model-feedback.jsonl --output /tmp/personalized.md
 python -m tools.ai_model_advisor.cli feedback-add --feedback ~/.hive/model-feedback.jsonl --provider anthropic --model claude-sonnet-5 --effort high --execution single --outcome success --retries 0 --latency-seconds 42 --cost-usd 0.31 --task-category implementation --task-id api-endpoint-17
+python -m tools.ai_model_advisor.cli feedback-import-hive --events /path/to/session/events.jsonl --details /path/to/session/logs/details.jsonl --feedback ~/.hive/model-feedback.jsonl --task-category repo_review --output /tmp/hive-feedback-import.md
 python -m tools.ai_model_advisor.cli scan --baseline /tmp/source-baseline.json --write-baseline /tmp/source-baseline.json --output /tmp/source-scan.md --json-output /tmp/source-scan.json
 ```
 
@@ -48,13 +49,48 @@ The Markdown output includes the primary model/effort/execution configuration pl
 
 ## Personal feedback policy
 
-Feedback is JSONL and stays local unless the user deliberately commits/uploads it. A record can include outcome (`success`, `partial`, `failure`), retries, latency, cost, task category, a stable task ID, and a note.
+Feedback is JSONL and stays local unless the user deliberately commits/uploads it. A record can include outcome (`success`, `partial`, `failure`), retries, latency, cost, task category, a stable task ID, an importer source ID, and a note.
 
 The router does **not** react to one-off anecdotes. Three observations are required before an exact model + effort + execution configuration can affect the quality score. Evidence from other effort/execution configurations of the same model is a weaker fallback and is not used until at least six category-compatible observations exist. Larger samples are shrunk toward neutral and capped so empirical history tunes the registry instead of replacing it.
 
 When feedback has a `task_category`, it is scoped to that type of work. For example, repeated success on `repo_review` can improve a model's score for future repository reviews but does not raise that model's score for `implementation`. Older untagged feedback remains a conservative fallback for backward compatibility.
 
 The router chooses the dominant category from the current workload profile before applying personal evidence. This keeps personalization task-aware rather than turning a generally successful model into the default for every job.
+
+### Automatic Hive telemetry import
+
+Hive already persists the signals the advisor needs instead of requiring the user to type cost and latency by hand:
+
+- session `events.jsonl` contains `llm_turn_complete` events with model, token usage, cache usage, and provider-reported USD cost;
+- session `logs/details.jsonl` contains node outcome, exit status, retry count, and node wall-clock latency.
+
+`feedback-import-hive` joins those two sources and appends eligible observations to the advisor feedback JSONL. It is deliberately conservative:
+
+- the registry must recognize every LLM model used by a node;
+- a node that changed models mid-run is skipped instead of assigning its combined outcome/cost to one model;
+- runtime details are joined only when the node ID has one unambiguous detail record;
+- explicit node/judge outcomes take precedence; execution-level success/failure is attributed only when the **full execution** contains one LLM node, even when `--node-id` filters the import;
+- provider cost is summed across LLM turns; a missing/zero provider cost is treated as unknown, not free;
+- corrupt/partial JSONL lines are ignored and reported rather than aborting the whole import;
+- each imported observation receives `source_id=hive:<execution_id>:<node_id>`, so rerunning the same import is idempotent.
+
+A normal history import defaults to `effort=observed` and `execution=hive_agent_loop`. That evidence can still influence a model after the conservative six-observation cross-config threshold, but it does **not** pretend the trace proves a specific reasoning-effort setting.
+
+For controlled A/B work, import one known node and stamp the exact configuration plus a stable benchmark task ID:
+
+```bash
+python -m tools.ai_model_advisor.cli feedback-import-hive \
+  --events /path/to/session/events.jsonl \
+  --details /path/to/session/logs/details.jsonl \
+  --feedback ~/.hive/model-feedback.jsonl \
+  --node-id implementation-worker \
+  --task-category implementation \
+  --task-id endpoint-benchmark-04 \
+  --effort medium \
+  --execution single
+```
+
+Run the command with `--dry-run` first when inspecting a new trace shape. In dry-run mode the importer produces its report but does not modify the feedback store.
 
 ### Paired cost and latency evidence
 
