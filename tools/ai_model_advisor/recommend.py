@@ -89,7 +89,8 @@ class RecommendationEngine:
         effort: str,
         mode: str,
         task_category: str | None,
-        feedback_adjustment: float,
+        quality_adjustment: float,
+        efficiency_adjustment: float,
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         reasons: list[str] = []
         tradeoffs: list[str] = []
@@ -103,23 +104,44 @@ class RecommendationEngine:
             reasons.append("Repository breadth and parallelizable work justify structured orchestration")
         if effort in {"xhigh", "max"}:
             reasons.append(f"{effort} is reserved here for unusually difficult or long-horizon work")
-        sample_count, _ = self.feedback.summary(
+
+        quality_samples, _ = self.feedback.summary(
             model.model_id,
             effort,
             mode,
             task_category,
         )
+        efficiency_samples, _ = self.feedback.efficiency_summary(
+            model.model_id,
+            effort,
+            mode,
+            task_category,
+            workload.latency_sensitivity,
+            workload.cost_sensitivity,
+        )
         category_label = f" for {task_category}" if task_category else ""
-        if feedback_adjustment >= 1.0:
+        if quality_adjustment >= 1.0:
             reasons.append(
-                f"Personal history{category_label} improves this configuration's score "
-                f"({sample_count} observations)"
+                f"Personal outcome history{category_label} improves this configuration's score "
+                f"({quality_samples} observations)"
             )
-        elif feedback_adjustment <= -1.0:
+        elif quality_adjustment <= -1.0:
             tradeoffs.append(
-                f"Personal history{category_label} reduces confidence in this configuration "
-                f"({sample_count} observations)"
+                f"Personal outcome history{category_label} reduces confidence in this configuration "
+                f"({quality_samples} observations)"
             )
+
+        if efficiency_adjustment >= 0.5:
+            reasons.append(
+                f"Paired same-task cost/latency history favors this configuration "
+                f"({efficiency_samples} comparable tasks)"
+            )
+        elif efficiency_adjustment <= -0.5:
+            tradeoffs.append(
+                f"Paired same-task cost/latency history is unfavorable "
+                f"({efficiency_samples} comparable tasks)"
+            )
+
         if model.capabilities.get("speed", 3) <= 2:
             tradeoffs.append("Expect higher latency")
         if model.cost_efficiency <= 2:
@@ -144,11 +166,23 @@ class RecommendationEngine:
         for model in self.registry.candidates(providers=providers, include_limited=include_limited):
             effort = self._effort(model, workload)
             mode = self._execution_mode(model, workload)
-            feedback_adjustment = self.feedback.adjustment(
+            quality_adjustment = self.feedback.adjustment(
                 model.model_id,
                 effort,
                 mode,
                 task_category,
+            )
+            efficiency_adjustment = self.feedback.efficiency_adjustment(
+                model.model_id,
+                effort,
+                mode,
+                task_category,
+                workload.latency_sensitivity,
+                workload.cost_sensitivity,
+            )
+            feedback_adjustment = max(
+                -10.0,
+                min(10.0, quality_adjustment + efficiency_adjustment),
             )
             score = self._base_score(model, workload) + feedback_adjustment
             reasons, tradeoffs = self._explain(
@@ -157,7 +191,8 @@ class RecommendationEngine:
                 effort,
                 mode,
                 task_category,
-                feedback_adjustment,
+                quality_adjustment,
+                efficiency_adjustment,
             )
             scored.append(
                 Recommendation(
