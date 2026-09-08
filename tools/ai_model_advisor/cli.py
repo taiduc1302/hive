@@ -143,6 +143,8 @@ def command_experiment_run(args: argparse.Namespace) -> int:
         args.order,
         "--timeout-seconds",
         str(args.timeout_seconds),
+        "--judge-timeout-seconds",
+        str(args.judge_timeout_seconds),
     ]
     if args.task is not None:
         forwarded.extend(["--task", args.task])
@@ -158,6 +160,8 @@ def command_experiment_run(args: argparse.Namespace) -> int:
         forwarded.extend(["--output", args.output])
     if args.json_output:
         forwarded.extend(["--json-output", args.json_output])
+    if args.judge:
+        forwarded.extend(["--judge", *args.judge])
     if args.runner:
         forwarded.extend(["--runner", *args.runner])
     return experiment_run_main(forwarded)
@@ -371,8 +375,14 @@ def build_parser() -> argparse.ArgumentParser:
     experiment_run.add_argument("--allow-ready", action="store_true")
     experiment_run.add_argument("--apply", action="store_true")
     experiment_run.add_argument("--timeout-seconds", type=float, default=1800.0)
+    experiment_run.add_argument("--judge-timeout-seconds", type=float, default=300.0)
     experiment_run.add_argument("--output")
     experiment_run.add_argument("--json-output")
+    experiment_run.add_argument(
+        "--judge",
+        nargs="+",
+        help="Optional deterministic outcome-checker argv; place before --runner.",
+    )
     experiment_run.add_argument(
         "--runner",
         nargs=argparse.REMAINDER,
