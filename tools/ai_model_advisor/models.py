@@ -61,10 +61,15 @@ class Recommendation:
     efficiency_adjustment: float = 0.0
 
     @property
-    def empirical_adjustment(self) -> float:
+    def raw_empirical_adjustment(self) -> float:
         return round(self.quality_adjustment + self.efficiency_adjustment, 3)
+
+    @property
+    def empirical_adjustment(self) -> float:
+        return round(self.score - self.base_score, 3)
 
     def as_dict(self) -> dict[str, Any]:
         payload = asdict(self)
+        payload["raw_empirical_adjustment"] = self.raw_empirical_adjustment
         payload["empirical_adjustment"] = self.empirical_adjustment
         return payload
