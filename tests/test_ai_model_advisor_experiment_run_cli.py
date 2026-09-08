@@ -7,7 +7,7 @@ import pytest
 from tools.ai_model_advisor.activity import ActivityAnalyzer
 from tools.ai_model_advisor.cli import build_parser as build_main_parser
 from tools.ai_model_advisor.experiment_plan import build_experiment_plan
-from tools.ai_model_advisor.experiment_run import RunnerInfrastructureError
+from tools.ai_model_advisor.experiment_run import ExperimentRunnerError, RunnerInfrastructureError
 from tools.ai_model_advisor.experiment_run_cli import main
 from tools.ai_model_advisor.feedback import FeedbackStore
 from tools.ai_model_advisor.recommend import RecommendationEngine
@@ -146,6 +146,110 @@ def test_cli_apply_runs_adapter_and_appends_exact_pair(tmp_path):
     assert result["applied"] is True
     assert result["order"] == ["A", "B"]
     assert "Feedback written: **yes**" in output.read_text(encoding="utf-8")
+
+
+def test_cli_builtin_expected_output_judge_sets_objective_outcome(tmp_path):
+    plan_path, pair = _write_plan(tmp_path)
+    feedback = tmp_path / "feedback.jsonl"
+    expected = tmp_path / "expected.txt"
+    expected.write_text("expected answer\n", encoding="utf-8")
+    adapter = tmp_path / "adapter.py"
+    adapter.write_text(
+        """import json, sys\npayload = json.load(sys.stdin)\nassert payload['acceptance_mode'] == 'external_judge'\nprint(json.dumps({'schema_version': 1, 'applied_configuration': payload['configuration'], 'outcome': 'partial', 'response_text': 'expected answer'}))\n""",
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                pair["experiment_id"],
+                "--feedback",
+                str(feedback),
+                "--task",
+                "Return the fixed answer.",
+                "--apply",
+                "--expected-output-file",
+                str(expected),
+                "--expected-output-mode",
+                "strip-exact",
+                "--runner",
+                sys.executable,
+                str(adapter),
+            ]
+        )
+        == 0
+    )
+
+    records = FeedbackStore.load(feedback).records
+    assert len(records) == 2
+    assert {record.outcome for record in records} == {"success"}
+    assert all("judge: trimmed exact text check passed" in record.note for record in records)
+
+
+def test_invalid_expected_json_is_rejected_before_adapter_launch(tmp_path):
+    plan_path, pair = _write_plan(tmp_path)
+    feedback = tmp_path / "feedback.jsonl"
+    expected = tmp_path / "expected.json"
+    expected.write_text("not-json", encoding="utf-8")
+    launched = tmp_path / "launched.txt"
+    adapter = tmp_path / "adapter.py"
+    adapter.write_text(
+        f"from pathlib import Path\nPath({str(launched)!r}).write_text('launched')\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ExperimentRunnerError, match="JSON fixture is invalid"):
+        main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                pair["experiment_id"],
+                "--feedback",
+                str(feedback),
+                "--task",
+                "Return JSON.",
+                "--apply",
+                "--expected-output-file",
+                str(expected),
+                "--expected-output-mode",
+                "json-equal",
+                "--runner",
+                sys.executable,
+                str(adapter),
+            ]
+        )
+
+    assert not launched.exists()
+    assert not feedback.exists()
+
+
+def test_cli_rejects_external_and_builtin_judges_together(tmp_path):
+    plan_path, pair = _write_plan(tmp_path)
+    expected = tmp_path / "expected.txt"
+    expected.write_text("answer", encoding="utf-8")
+
+    with pytest.raises(ExperimentRunnerError, match="either --judge or --expected-output-file"):
+        main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                pair["experiment_id"],
+                "--feedback",
+                str(tmp_path / "feedback.jsonl"),
+                "--task",
+                "Return answer.",
+                "--expected-output-file",
+                str(expected),
+                "--judge",
+                sys.executable,
+                "judge.py",
+            ]
+        )
 
 
 def test_cli_infrastructure_failure_leaves_feedback_unchanged(tmp_path):
