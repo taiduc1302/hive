@@ -23,6 +23,11 @@ class UsageRecord:
     retries: int = 0
     latency_seconds: float | None = None
     cost_usd: float | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cached_tokens: int | None = None
+    cache_creation_tokens: int | None = None
+    credits: float | None = None
     task_category: str | None = None
     task_id: str | None = None
     source_id: str | None = None
@@ -37,6 +42,17 @@ class UsageRecord:
             raise ValueError("latency_seconds must be > 0 when provided")
         if self.cost_usd is not None and self.cost_usd < 0:
             raise ValueError("cost_usd must be >= 0 when provided")
+        for name in (
+            "input_tokens",
+            "output_tokens",
+            "cached_tokens",
+            "cache_creation_tokens",
+        ):
+            value = getattr(self, name)
+            if value is not None and value < 0:
+                raise ValueError(f"{name} must be >= 0 when provided")
+        if self.credits is not None and self.credits < 0:
+            raise ValueError("credits must be >= 0 when provided")
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -56,6 +72,10 @@ class FeedbackStore:
     ``task_id`` was successfully attempted by the candidate configuration and
     at least one alternative configuration. This paired comparison prevents a
     quick small task from being treated as evidence against a slower large one.
+
+    Token/cache counts and Hive credits are retained for auditability but do
+    not currently affect routing. Cached/cache-creation tokens are subsets of
+    input tokens and must never be added to input again when reporting totals.
 
     ``source_id`` is metadata only. Importers use it as an idempotency key so
     re-reading the same trace does not duplicate evidence.
