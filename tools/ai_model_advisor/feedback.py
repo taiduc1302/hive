@@ -51,6 +51,11 @@ class UsageRecord:
             value = getattr(self, name)
             if value is not None and value < 0:
                 raise ValueError(f"{name} must be >= 0 when provided")
+        if self.input_tokens is not None:
+            for name in ("cached_tokens", "cache_creation_tokens"):
+                value = getattr(self, name)
+                if value is not None and value > self.input_tokens:
+                    raise ValueError(f"{name} must be <= input_tokens when both are provided")
         if self.credits is not None and self.credits < 0:
             raise ValueError("credits must be >= 0 when provided")
 
