@@ -22,6 +22,29 @@ jobs:
             const prTitle = pr.title || '';
             const prLabels = (pr.labels || []).map(l => l.name);
 
+            // A linked issue cannot be created when repository Issues are disabled.
+            // In that configuration the issue requirement is structurally impossible,
+            // so skip only that policy check while preserving the normal rule when
+            // Issues are enabled again.
+            const { data: repository } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            if (!repository.has_issues) {
+              console.log(`Repository Issues are disabled; skipping linked-issue requirement for PR #${prNumber}.`);
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: 'pr-requirements-warning',
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+              return;
+            }
+
             // Allow micro-fix and documentation PRs without a linked issue
             const isMicroFix = prLabels.includes('micro-fix') || /micro-fix/i.test(prTitle);
             const isDocumentation = prLabels.includes('documentation') || /\bdocs?\b/i.test(prTitle);
