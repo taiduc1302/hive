@@ -87,6 +87,8 @@ Example request:
 
 The adapter owns translation from this neutral configuration to the real execution environment. If an environment cannot set a requested field, the adapter must refuse the run rather than silently downgrade it.
 
+`effort="default"` is a deliberate sentinel meaning **use the provider default and send no explicit effort control**. It is not an alias for `medium` or `high`. Use it only for a registry model whose current provider interface does not expose a supported effort knob. The adapter must still return `"effort": "default"` in `applied_configuration` after proving that it did not explicitly send an effort setting.
+
 When a deterministic `--judge` is present, the runner also sets:
 
 ```json
@@ -174,15 +176,16 @@ python -m tools.ai_model_advisor.provider_api_adapter
 It intentionally has a narrow scope:
 
 - only `execution_mode=single`;
-- OpenAI uses the Responses API and maps Advisor effort to `reasoning.effort`;
-- Anthropic uses the Messages API and maps Advisor effort to `output_config.effort`;
+- OpenAI uses the Responses API and maps any **non-default** Advisor effort to `reasoning.effort`; `effort=default` omits the explicit reasoning-effort field;
+- Anthropic uses the Messages API and maps any **non-default** Advisor effort to `output_config.effort`; `effort=default` omits `output_config` entirely;
+- use `effort=default` for registry models whose current API exposes no supported effort control, such as Claude Haiku 4.5;
 - API keys come only from `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`;
 - `AI_MODEL_ADVISOR_MAX_OUTPUT_TOKENS` can set the common output cap (default 32768);
 - `AI_MODEL_ADVISOR_PROVIDER_TIMEOUT_SECONDS` can set the inner HTTP timeout (default 300);
 - raw API keys are never included in adapter output;
 - response text plus token/cache telemetry is returned to the judge;
 - Anthropic input usage is normalized as uncached + cache-read + cache-creation tokens so Advisor cache invariants remain valid;
-- when OpenAI explicitly echoes `reasoning.effort`, a mismatch with the saved experiment is rejected.
+- when OpenAI explicitly echoes `reasoning.effort` for a non-default request, a mismatch with the saved experiment is rejected.
 
 The direct provider adapter **requires** `acceptance_mode=external_judge`. In practical terms, use it only with `--judge`. A successful HTTP response is transport success, not benchmark success.
 
@@ -205,6 +208,29 @@ python -m tools.ai_model_advisor.cli experiment-run \
 If a planned comparison uses `chatgpt_work`, `ultracode`, `subagents`, `dynamic_workflow`, or another orchestration mode, use a host-specific adapter instead. The direct API adapter rejects those modes rather than pretending a single API call is equivalent.
 
 The direct adapter currently records provider token/cache metrics and wrapper latency. It does not invent `cost_usd` when the provider response does not contain an authoritative request cost; paired cost scoring can remain absent while latency/token diagnostics are still retained.
+
+## Built-in Hive LiteLLM adapter
+
+For experiments that must pass through Hive's own LiteLLM transport and request transformations, use:
+
+```bash
+python -m tools.ai_model_advisor.hive_litellm_adapter
+```
+
+This adapter is also deliberately narrow:
+
+- only `execution_mode=single`;
+- only OpenAI and Anthropic provider routes currently participate;
+- provider API credentials still come from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`;
+- non-default Advisor effort is passed to `LiteLLMProvider` as `reasoning_effort`;
+- `effort=default` does **not** pass a reasoning-effort kwarg;
+- Hive's post-transform request capture is inspected before evidence is accepted;
+- model ID must match the requested model on the outgoing body;
+- for non-default effort, the outgoing wire body must prove the exact requested effort;
+- for `effort=default`, the outgoing wire body must prove that no explicit effort was sent;
+- a mismatch is infrastructure/configuration failure and writes no model-quality evidence.
+
+This distinction matters because a host/library can silently transform or drop provider parameters. The Hive adapter validates the request **after** those transformations rather than trusting the constructor arguments alone.
 
 ## Outcome semantics
 
