@@ -30,6 +30,8 @@ Treat the runner as an execution adapter, not as evidence by itself. It receives
 
 Reject evidence when `applied_configuration` differs from the saved plan. Never assume an environment honored `medium`, `xhigh`, `ultracode`, subagents, ChatGPT Work, or another control merely because the plan requested it.
 
+Use `effort=default` only when the registry intentionally means **provider default with no explicit effort knob sent**. This is not an alias for `medium` or `high`, and it must not be treated as proof that a provider used a specific internal reasoning depth.
+
 Use argv execution, not a shell string. Place `--runner` last because it consumes the remainder of the command line.
 
 ## Built-in direct provider adapter
@@ -43,14 +45,15 @@ python -m tools.ai_model_advisor.provider_api_adapter
 Rules:
 
 - only `execution_mode=single` is supported;
-- OpenAI maps Advisor effort to Responses API `reasoning.effort`;
-- Anthropic maps Advisor effort to Messages API `output_config.effort`;
+- OpenAI maps non-default Advisor effort to Responses API `reasoning.effort`; `effort=default` omits the reasoning-effort field;
+- Anthropic maps non-default Advisor effort to Messages API `output_config.effort`; `effort=default` omits `output_config` entirely;
+- use `effort=default` for registry models whose current provider API exposes no supported effort control, such as Claude Haiku 4.5;
 - keys come only from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`;
 - unsupported orchestration modes are rejected rather than approximated;
 - the adapter requires `acceptance_mode=external_judge`, so use it only with a deterministic judge;
 - the adapter returns candidate `response_text` plus token/cache telemetry for judging/diagnostics;
 - Anthropic cache-read/cache-creation usage is normalized into total input tokens for Advisor invariants;
-- if OpenAI explicitly echoes a different reasoning effort, reject the observation;
+- if OpenAI explicitly echoes a different reasoning effort for a non-default request, reject the observation;
 - do not invent USD cost when the API response does not contain authoritative request cost.
 
 ## Deterministic outcome judge
