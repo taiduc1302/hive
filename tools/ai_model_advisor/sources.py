@@ -5,7 +5,7 @@ import html
 import json
 import re
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -21,6 +21,7 @@ SIGNAL_RE = re.compile(
     r"|\b(?:ultracode|xhigh|max effort|dynamic workflow|scheduled tasks?|skills?)\b)",
     flags=re.IGNORECASE,
 )
+_MODEL_SIGNAL_PREFIXES = ("claude ", "claude-", "gpt", "gpt-")
 
 
 class _TextExtractor(HTMLParser):
@@ -61,6 +62,9 @@ class ScanReport:
     changed_sources: list[str]
     unknown_signals: list[str]
     results: list[SourceResult]
+    new_unknown_signals: list[str] = field(default_factory=list)
+    signal_baseline_ready: bool = False
+    unbaselined_sources: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -68,6 +72,9 @@ class ScanReport:
             "registry_as_of": self.registry_as_of,
             "changed_sources": self.changed_sources,
             "unknown_signals": self.unknown_signals,
+            "new_unknown_signals": self.new_unknown_signals,
+            "signal_baseline_ready": self.signal_baseline_ready,
+            "unbaselined_sources": self.unbaselined_sources,
             "results": [asdict(item) for item in self.results],
         }
 
@@ -118,12 +125,30 @@ def _known_model_signals(registry: ModelRegistry) -> set[str]:
     return known
 
 
+def _baseline_source_signals(baseline: dict[str, Any]) -> dict[str, list[str]]:
+    raw = baseline.get("source_signals", {})
+    if not isinstance(raw, dict):
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for source_id, signals in raw.items():
+        if not isinstance(source_id, str) or not isinstance(signals, list):
+            continue
+        normalized[source_id] = [signal for signal in signals if isinstance(signal, str)]
+    return normalized
+
+
+def _is_unregistered_model_signal(signal: str, known: set[str]) -> bool:
+    lowered = signal.lower()
+    return lowered.startswith(_MODEL_SIGNAL_PREFIXES) and lowered not in known
+
+
 def scan_official_sources(
     registry: ModelRegistry,
     baseline_path: str | Path | None = None,
 ) -> ScanReport:
     baseline = load_baseline(baseline_path)
     baseline_hashes = baseline.get("source_hashes", {}) if isinstance(baseline, dict) else {}
+    previous_source_signals = _baseline_source_signals(baseline)
 
     results: list[SourceResult] = []
     changed: list[str] = []
@@ -149,18 +174,48 @@ def scan_official_sources(
         results.append(result)
 
     known = _known_model_signals(registry)
-    model_prefixes = ("claude ", "claude-", "gpt", "gpt-")
     unknown = [
         signal
         for signal in sorted(all_signals, key=str.lower)
-        if signal.lower().startswith(model_prefixes) and signal.lower() not in known
+        if _is_unregistered_model_signal(signal, known)
     ]
+
+    previous_all = {
+        signal.lower()
+        for signals in previous_source_signals.values()
+        for signal in signals
+    }
+    new_by_lower: dict[str, str] = {}
+    for item in results:
+        previous = previous_source_signals.get(item.source_id)
+        if not item.ok or previous is None:
+            continue
+        previous_for_source = {signal.lower() for signal in previous}
+        for signal in item.signals:
+            lowered = signal.lower()
+            if not _is_unregistered_model_signal(signal, known):
+                continue
+            if lowered in previous_for_source or lowered in previous_all:
+                continue
+            new_by_lower.setdefault(lowered, signal)
+
+    unbaselined_sources = [
+        item.source_id
+        for item in results
+        if item.ok and item.source_id not in previous_source_signals
+    ]
+    signal_baseline_ready = any(
+        source_id in previous_source_signals for source_id in registry.sources
+    )
     return ScanReport(
         datetime.now(UTC).isoformat(timespec="seconds"),
         registry.as_of,
         changed,
         unknown,
         results,
+        new_unknown_signals=sorted(new_by_lower.values(), key=str.lower),
+        signal_baseline_ready=signal_baseline_ready,
+        unbaselined_sources=unbaselined_sources,
     )
 
 
@@ -168,14 +223,29 @@ def baseline_from_report(
     report: ScanReport,
     previous_baseline: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    previous_hashes = (previous_baseline or {}).get("source_hashes", {})
-    source_hashes = dict(previous_hashes) if isinstance(previous_hashes, dict) else {}
-    source_hashes.update(
-        {item.source_id: item.signal_hash for item in report.results if item.ok}
-    )
+    previous = previous_baseline or {}
+    previous_hashes = previous.get("source_hashes", {})
+    if not isinstance(previous_hashes, dict):
+        previous_hashes = {}
+    previous_signals = _baseline_source_signals(previous)
+
+    source_hashes: dict[str, str] = {}
+    source_signals: dict[str, list[str]] = {}
+    for item in report.results:
+        if item.ok:
+            source_hashes[item.source_id] = item.signal_hash
+            source_signals[item.source_id] = list(item.signals)
+            continue
+        previous_hash = previous_hashes.get(item.source_id)
+        if isinstance(previous_hash, str):
+            source_hashes[item.source_id] = previous_hash
+        if item.source_id in previous_signals:
+            source_signals[item.source_id] = list(previous_signals[item.source_id])
+
     return {
         "generated_at": report.generated_at,
         "source_hashes": source_hashes,
+        "source_signals": source_signals,
     }
 
 
@@ -187,9 +257,26 @@ def scan_markdown(report: ScanReport) -> str:
         f"Registry as-of: **{report.registry_as_of}**",
         "",
         f"Changed source fingerprints: **{len(report.changed_sources)}**",
-        f"Potential unknown model signals: **{len(report.unknown_signals)}**",
+        f"New unregistered model signals since baseline: **{len(report.new_unknown_signals)}**",
+        f"Observed unregistered model-like signals: **{len(report.unknown_signals)}**",
         "",
     ]
+    if not report.signal_baseline_ready:
+        lines.extend(
+            [
+                "Signal-history baseline is being initialized. Existing unregistered-looking names are informational and are not treated as new on this run.",
+                "",
+            ]
+        )
+    elif report.unbaselined_sources:
+        lines.extend(
+            [
+                "The following successful sources have no prior signal-history baseline and are initialized without generating new-model alerts:",
+                "",
+                *[f"- `{item}`" for item in report.unbaselined_sources],
+                "",
+            ]
+        )
     if report.changed_sources:
         lines.extend(
             [
@@ -199,12 +286,12 @@ def scan_markdown(report: ScanReport) -> str:
                 "",
             ]
         )
-    if report.unknown_signals:
+    if report.new_unknown_signals:
         lines.extend(
             [
-                "## Signals to review",
+                "## New model signals to review",
                 "",
-                *[f"- `{item}`" for item in report.unknown_signals[:50]],
+                *[f"- `{item}`" for item in report.new_unknown_signals[:50]],
                 "",
             ]
         )
@@ -224,6 +311,7 @@ def scan_markdown(report: ScanReport) -> str:
             "",
             (
                 "A changed fingerprint is a review trigger, not proof that a model changed. "
+                "Only newly observed unregistered model signals from an already-baselined source are promoted to review alerts. "
                 "The scanner intentionally uses official sources only by default."
             ),
             "",

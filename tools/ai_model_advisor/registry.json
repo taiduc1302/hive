@@ -11,9 +11,7 @@
     {"id":"anthropic_dynamic_workflows","provider":"anthropic","url":"https://platform.claude.com/cookbook/claude-agent-sdk-08-dynamic-workflows","kind":"execution"},
     {"id":"openai_models","provider":"openai","url":"https://developers.openai.com/api/docs/models","kind":"catalog"},
     {"id":"openai_model_guidance","provider":"openai","url":"https://developers.openai.com/api/docs/guides/latest-model","kind":"mode"},
-    {"id":"openai_skills","provider":"openai","url":"https://help.openai.com/en/articles/20001066-skills-in-chatgpt/","kind":"product"},
-    {"id":"openai_scheduled_tasks","provider":"openai","url":"https://help.openai.com/en/articles/10291617-what-is-agent-mode","kind":"product"},
-    {"id":"openai_release_notes","provider":"openai","url":"https://help.openai.com/en/articles/6825453-chatgpt-release-notes","kind":"release_notes"}
+    {"id":"openai_release_notes","provider":"openai","url":"https://openai.com/products/release-notes/","kind":"release_notes"}
   ],
   "models": [
     {"provider":"openai","model_id":"gpt-6-astra","label":"GPT-6 Astra","status":"active","context_tokens":1050000,"max_output_tokens":128000,"input_usd_per_mtok":10.0,"output_usd_per_mtok":50.0,"efforts":["low","medium","high","xhigh","max"],"default_effort":"medium","execution_modes":["single","chatgpt_work"],"capabilities":{"reasoning":5,"coding":5,"agentic":5,"long_horizon":5,"ambiguity":5,"speed":2.5,"cost_efficiency":1.5},"source_ids":["openai_models"],"notes":"Current flagship for the hardest end-to-end reasoning and coding work; expensive enough that workload overkill penalties still apply."},
