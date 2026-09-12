@@ -11,6 +11,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_EXPERIMENTS.md"
       - "docs/AI_MODEL_ADVISOR_CONFIGURATION_ROUTING.md"
       - "docs/AI_MODEL_ADVISOR_RUNNER.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_ADAPTER.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
       - ".github/workflows/ai-model-advisor.yml"
   schedule:
