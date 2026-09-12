@@ -15,7 +15,7 @@ from .registry import ModelRegistry
 
 SIGNAL_RE = re.compile(
     r"(Claude\s+(?:Fable|Mythos|Opus|Sonnet|Haiku)\s+\d+(?:\.\d+)?"
-    r"|claude-(?:fable|mythos|opus|sonnet|haiku)-\d+(?:-\d+)?"
+    r"|claude-(?:fable|mythos|opus|sonnet|haiku)-\d+(?:-\d+)?(?:-\d{8})?"
     r"|GPT[-‑ ]?\d+(?:\.\d+)?(?:\s+(?:Sol|Terra|Luna|Astra|Pro|Codex))?"
     r"|gpt-\d+(?:\.\d+)?(?:-(?:sol|terra|luna|astra|pro|codex))?"
     r"|\b(?:ultracode|xhigh|max effort|dynamic workflow|scheduled tasks?|skills?)\b)",
@@ -106,6 +106,18 @@ def load_baseline(path: str | Path | None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _known_model_signals(registry: ModelRegistry) -> set[str]:
+    known: set[str] = set()
+    for model in registry.models:
+        model_id = model.model_id.lower()
+        known.add(model_id)
+        known.add(model.label.lower())
+        snapshot = re.fullmatch(r"(.+)-\d{8}", model_id)
+        if snapshot:
+            known.add(snapshot.group(1))
+    return known
+
+
 def scan_official_sources(
     registry: ModelRegistry,
     baseline_path: str | Path | None = None,
@@ -136,8 +148,7 @@ def scan_official_sources(
             )
         results.append(result)
 
-    known = {model.model_id.lower() for model in registry.models}
-    known.update(model.label.lower() for model in registry.models)
+    known = _known_model_signals(registry)
     model_prefixes = ("claude ", "claude-", "gpt", "gpt-")
     unknown = [
         signal
