@@ -11,7 +11,7 @@
 ## Starting points
 
 ### Anthropic
-- https://platform.claude.com/docs/en/about-claude/models/overview
+- https://platform.claude.com/docs/en/models/overview
 - https://platform.claude.com/docs/en/build-with-claude/effort
 - https://code.claude.com/docs/en/model-config
 - https://platform.claude.com/cookbook/claude-agent-sdk-08-dynamic-workflows
