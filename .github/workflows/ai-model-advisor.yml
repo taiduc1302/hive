@@ -1,0 +1,171 @@
+name: AI Model Advisor
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/ai_model_advisor/**"
+      - "tests/test_ai_model_advisor*.py"
+      - "skills/ai-model-advisor/**"
+      - "docs/AI_MODEL_ADVISOR.md"
+      - "docs/AI_MODEL_ADVISOR_EXPERIMENTS.md"
+      - "docs/AI_MODEL_ADVISOR_CONFIGURATION_ROUTING.md"
+      - "docs/AI_MODEL_ADVISOR_RUNNER.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_ADAPTER.md"
+      - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
+      - ".github/workflows/ai-model-advisor.yml"
+  schedule:
+    # 07:05 America/Vancouver during PDT. GitHub cron uses UTC.
+    - cron: "5 14 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  model-watch-and-profile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install validation dependencies
+        run: python -m pip install pytest ruff
+
+      - name: Lint advisor files
+        run: ruff check tools/ai_model_advisor tests/test_ai_model_advisor*.py
+
+      - name: Run advisor tests
+        run: python -m pytest tests/test_ai_model_advisor*.py
+
+      - name: Restore previous source baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: .model-advisor-cache/source-baseline.json
+          key: ai-model-advisor-baseline-${{ github.run_id }}
+          restore-keys: |
+            ai-model-advisor-baseline-
+
+      - name: Scan official model sources
+        shell: bash
+        run: |
+          mkdir -p model-advisor-output .model-advisor-cache
+          baseline_args=()
+          if [ -f .model-advisor-cache/source-baseline.json ]; then
+            baseline_args=(--baseline .model-advisor-cache/source-baseline.json)
+          fi
+          python -m tools.ai_model_advisor.cli scan \
+            "${baseline_args[@]}" \
+            --output model-advisor-output/source-scan.md \
+            --json-output model-advisor-output/source-scan.json \
+            --write-baseline model-advisor-output/source-baseline.json
+          cp model-advisor-output/source-baseline.json .model-advisor-cache/source-baseline.json
+
+      - name: Save current source baseline
+        uses: actions/cache/save@v4
+        with:
+          path: .model-advisor-cache/source-baseline.json
+          key: ai-model-advisor-baseline-${{ github.run_id }}
+
+      - name: Build profile from public GitHub activity
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.ai_model_advisor.cli profile \
+            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --output model-advisor-output/github-workload.json
+
+      - name: Generate recommendations
+        run: |
+          python -m tools.ai_model_advisor.cli recommend \
+            --profile model-advisor-output/github-workload.json \
+            --output model-advisor-output/recommendation.md \
+            --json-output model-advisor-output/recommendation.json
+
+      - name: Generate task routing matrix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.ai_model_advisor.cli matrix \
+            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --output model-advisor-output/routing-matrix.md \
+            --json-output model-advisor-output/routing-matrix.json
+
+      - name: Generate controlled experiment plan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m tools.ai_model_advisor.cli experiment-plan \
+            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/experiment-plan.md \
+            --json-output model-advisor-output/experiment-plan.json
+
+      - name: Smoke-test controlled experiment runner preview
+        shell: bash
+        run: |
+          experiment_id="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path("model-advisor-output/experiment-plan.json").read_text())
+          pairs = [pair for category in plan.get("categories", []) for pair in category.get("pairs", [])]
+          if not pairs:
+              raise SystemExit("experiment plan did not produce a pair for runner preview smoke test")
+          print(pairs[0]["experiment_id"])
+          PY
+          )"
+          python -m tools.ai_model_advisor.experiment_run_cli \
+            --plan model-advisor-output/experiment-plan.json \
+            --experiment-id "$experiment_id" \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --task "CI preview only: no model or provider execution is allowed." \
+            --output model-advisor-output/experiment-run-preview-smoke.md \
+            --json-output model-advisor-output/experiment-run-preview-smoke.json
+
+      - name: Smoke-test controlled experiment evaluator
+        run: |
+          python -m tools.ai_model_advisor.cli experiment-evaluate \
+            --plan model-advisor-output/experiment-plan.json \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/experiment-evaluation-smoke.md \
+            --json-output model-advisor-output/experiment-evaluation-smoke.json
+
+      - name: Smoke-test experiment impact analysis
+        run: |
+          python -m tools.ai_model_advisor.cli experiment-impact \
+            --plan model-advisor-output/experiment-plan.json \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/experiment-impact-smoke.md \
+            --json-output model-advisor-output/experiment-impact-smoke.json
+
+      - name: Smoke-test feedback evidence commands
+        run: |
+          python -m tools.ai_model_advisor.cli feedback-report \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/feedback-audit-smoke.md \
+            --json-output model-advisor-output/feedback-audit-smoke.json
+          python -m tools.ai_model_advisor.cli feedback-readiness \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/feedback-readiness-smoke.md \
+            --json-output model-advisor-output/feedback-readiness-smoke.json
+
+      - name: Publish advisor summary
+        shell: bash
+        run: |
+          cat model-advisor-output/recommendation.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/routing-matrix.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/source-scan.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload model-advisor report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-model-advisor-${{ github.run_id }}
+          path: model-advisor-output/
+          retention-days: 30

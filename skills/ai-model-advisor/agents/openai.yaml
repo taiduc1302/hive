@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Model Advisor"
+  short_description: "Track model changes and pick the right model, effort, and agent mode."
+  default_prompt: "Review the current AI model landscape and my recent workload, then recommend the best model, reasoning effort, and execution mode."

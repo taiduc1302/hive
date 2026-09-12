@@ -1,0 +1,8 @@
+{
+  "activities": [
+    {"title": "Audit the whole repository architecture and identify missing integrations"},
+    {"text": "Compare several open-source projects and implement the useful ideas without copying code"},
+    {"text": "Run tests, debug failures, and review the final changes across many files"},
+    {"text": "Build an autonomous scheduled workflow that can run overnight and produce a QA report"}
+  ]
+}
