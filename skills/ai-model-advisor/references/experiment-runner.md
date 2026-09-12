@@ -56,6 +56,29 @@ Rules:
 - if OpenAI explicitly echoes a different reasoning effort for a non-default request, reject the observation;
 - do not invent USD cost when the API response does not contain authoritative request cost.
 
+## Built-in Hive LiteLLM adapter
+
+When the question is how a model/effort behaves through Hive's own LLM transport rather than through a direct provider HTTP call, use:
+
+```bash
+python -m tools.ai_model_advisor.hive_litellm_adapter
+```
+
+Rules:
+
+- this adapter still supports only `execution_mode=single`; it does **not** stand in for Hive AgentLoop, colonies, subagents, ultracode, ChatGPT Work, or another orchestration layer;
+- it uses Hive's real `LiteLLMProvider` path and requires `acceptance_mode=external_judge`;
+- provider keys come only from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`;
+- it runs with a temporary `HIVE_HOME` and restores the caller's previous value afterwards;
+- it uses Hive's post-transform LiteLLM request capture to prove the actual wire model and effort semantics before returning evidence;
+- OpenAI non-default effort must survive as `reasoning_effort` or `reasoning.effort`;
+- Anthropic non-default effort must survive as `output_config.effort`;
+- `effort=default` must produce no explicit provider effort field; reject evidence if a concrete effort appears on the wire;
+- if the installed Hive/LiteLLM stack drops, rewrites, invents, or cannot support the requested configuration, treat that as adapter/runtime incompatibility and append no model evidence;
+- Hive currently pins LiteLLM independently from the Advisor registry, so a model being current in the registry does not prove the local Hive transport supports it.
+
+Use this adapter to test **transport compatibility through Hive**. Build a separate host-specific adapter before claiming evidence about full Hive AgentLoop or colony orchestration.
+
 ## Deterministic outcome judge
 
 Prefer a judge when correctness can be checked independently: tests, schema validation, fixed expected values, artifact checks, static analysis, or another deterministic contract.
