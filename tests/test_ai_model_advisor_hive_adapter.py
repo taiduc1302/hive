@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -58,6 +59,30 @@ def test_wire_verification_requires_anthropic_output_config() -> None:
         )
 
 
+def test_wire_verification_accepts_provider_default_without_explicit_effort() -> None:
+    openai_config = _payload(effort="default")["configuration"]
+    anthropic_config = _payload(provider="anthropic", effort="default")["configuration"]
+
+    _verify_wire_configuration(openai_config, {"body": {"model": "gpt-6-astra"}})
+    _verify_wire_configuration(anthropic_config, {"body": {"model": "claude-opus-5"}})
+
+
+def test_wire_verification_rejects_explicit_effort_for_provider_default() -> None:
+    openai_config = _payload(effort="default")["configuration"]
+    anthropic_config = _payload(provider="anthropic", effort="default")["configuration"]
+
+    with pytest.raises(HiveAdapterError, match="explicit reasoning effort"):
+        _verify_wire_configuration(
+            openai_config,
+            {"body": {"model": "gpt-6-astra", "reasoning": {"effort": "medium"}}},
+        )
+    with pytest.raises(HiveAdapterError, match="explicit reasoning effort"):
+        _verify_wire_configuration(
+            anthropic_config,
+            {"body": {"model": "claude-opus-5", "output_config": {"effort": "high"}}},
+        )
+
+
 def test_wire_verification_rejects_model_mismatch() -> None:
     config = _payload()["configuration"]
     with pytest.raises(HiveAdapterError, match="wire model mismatch"):
@@ -109,7 +134,7 @@ def test_hive_adapter_returns_runner_schema_and_restores_hive_home(monkeypatch) 
     assert result["cost_usd"] == 0.004
     assert result["cached_tokens"] == 2
     assert result["latency_seconds"] >= 0
-    assert __import__("os").environ["HIVE_HOME"] == "/original/hive-home"
+    assert os.environ["HIVE_HOME"] == "/original/hive-home"
 
 
 def test_hive_adapter_fails_closed_when_effort_disappears() -> None:
