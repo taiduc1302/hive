@@ -104,6 +104,14 @@ def build_provider_request(payload: dict[str, Any]) -> ProviderRequest:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ProviderAdapterError("OPENAI_API_KEY is required for OpenAI experiments")
+        body: dict[str, Any] = {
+            "model": config["model_id"],
+            "input": task,
+            "max_output_tokens": max_output_tokens,
+            "store": False,
+        }
+        if config["effort"] != "default":
+            body["reasoning"] = {"effort": config["effort"]}
         return ProviderRequest(
             provider="openai",
             url=_OPENAI_ENDPOINT,
@@ -111,19 +119,20 @@ def build_provider_request(payload: dict[str, Any]) -> ProviderRequest:
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            body={
-                "model": config["model_id"],
-                "input": task,
-                "reasoning": {"effort": config["effort"]},
-                "max_output_tokens": max_output_tokens,
-                "store": False,
-            },
+            body=body,
             configuration=config,
         )
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ProviderAdapterError("ANTHROPIC_API_KEY is required for Anthropic experiments")
+    body = {
+        "model": config["model_id"],
+        "max_tokens": max_output_tokens,
+        "messages": [{"role": "user", "content": task}],
+    }
+    if config["effort"] != "default":
+        body["output_config"] = {"effort": config["effort"]}
     return ProviderRequest(
         provider="anthropic",
         url=_ANTHROPIC_ENDPOINT,
@@ -132,12 +141,7 @@ def build_provider_request(payload: dict[str, Any]) -> ProviderRequest:
             "anthropic-version": _ANTHROPIC_VERSION,
             "Content-Type": "application/json",
         },
-        body={
-            "model": config["model_id"],
-            "max_tokens": max_output_tokens,
-            "messages": [{"role": "user", "content": task}],
-            "output_config": {"effort": config["effort"]},
-        },
+        body=body,
         configuration=config,
     )
 
@@ -229,6 +233,8 @@ def _anthropic_normalized_usage(usage: dict[str, Any]) -> tuple[int | None, int 
 
 
 def _verify_openai_effort_echo(request: ProviderRequest, response: dict[str, Any]) -> None:
+    if request.configuration["effort"] == "default":
+        return
     reasoning = response.get("reasoning")
     if not isinstance(reasoning, dict):
         return
