@@ -139,9 +139,16 @@ def test_failed_source_preserves_hash_and_signal_history_while_removed_sources_p
     assert baseline["source_signals"] == {"kept_source": ["Claude Opus 4.8"]}
 
 
-def test_automated_openai_release_source_avoids_help_center_blocking():
+def test_automated_openai_sources_use_fetchable_developer_docs():
     registry = ModelRegistry()
-    urls = {source_id: source["url"] for source_id, source in registry.sources.items()}
+    openai_sources = {
+        source_id: source["url"]
+        for source_id, source in registry.sources.items()
+        if source.get("provider") == "openai"
+    }
 
-    assert urls["openai_release_notes"] == "https://openai.com/products/release-notes/"
-    assert all("help.openai.com" not in str(url) for url in urls.values())
+    assert set(openai_sources) == {"openai_models", "openai_model_guidance"}
+    assert all(
+        str(url).startswith("https://developers.openai.com/")
+        for url in openai_sources.values()
+    )
