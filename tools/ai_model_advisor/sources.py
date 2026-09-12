@@ -264,7 +264,7 @@ def scan_markdown(report: ScanReport) -> str:
     if not report.signal_baseline_ready:
         lines.extend(
             [
-                "Signal-history baseline is being initialized. Existing unregistered-looking names are informational and are not treated as new on this run.",
+                "Signal-history baseline is being initialized. Existing unregistered-looking names are informational only for this run.",
                 "",
             ]
         )
