@@ -72,7 +72,8 @@ def validate_runner_payload(payload: dict[str, Any]) -> tuple[str, dict[str, str
     }
     if normalized["execution_mode"] != "single":
         raise HiveAdapterError(
-            "Hive LiteLLM adapter only supports execution_mode=single; AgentLoop, colony, subagent, and Work-style orchestration need separate adapters"
+            "Hive LiteLLM adapter only supports execution_mode=single; "
+            "AgentLoop, colony, subagent, and Work-style orchestration need separate adapters"
         )
     if normalized["provider"] not in _SUPPORTED_PROVIDERS:
         raise HiveAdapterError(f"unsupported Hive LiteLLM provider: {normalized['provider']}")
