@@ -117,12 +117,14 @@ def _load_hive_transport(
             "Hive framework/LiteLLM is not importable; install the repository workspace before using this adapter"
         ) from exc
 
-    provider = LiteLLMProvider(
-        model=_provider_model(configuration),
-        api_key=_provider_api_key(configuration),
-        timeout=timeout_seconds,
-        reasoning_effort=configuration["effort"],
-    )
+    provider_kwargs: dict[str, Any] = {
+        "model": _provider_model(configuration),
+        "api_key": _provider_api_key(configuration),
+        "timeout": timeout_seconds,
+    }
+    if configuration["effort"] != "default":
+        provider_kwargs["reasoning_effort"] = configuration["effort"]
+    provider = LiteLLMProvider(**provider_kwargs)
     version = str(getattr(litellm_package, "__version__", "unknown"))
     return provider, hive_litellm._last_llm_request.get, version
 
@@ -140,6 +142,17 @@ def _flatten_request_body(request: dict[str, Any] | None) -> dict[str, Any]:
     return merged
 
 
+def _wire_effort(provider: str, body: dict[str, Any]) -> Any:
+    if provider == "openai":
+        actual_effort = body.get("reasoning_effort")
+        reasoning = body.get("reasoning")
+        if actual_effort is None and isinstance(reasoning, dict):
+            actual_effort = reasoning.get("effort")
+        return actual_effort
+    output_config = body.get("output_config")
+    return output_config.get("effort") if isinstance(output_config, dict) else None
+
+
 def _verify_wire_configuration(configuration: dict[str, str], request: dict[str, Any] | None) -> None:
     body = _flatten_request_body(request)
     model_id = configuration["model_id"]
@@ -151,15 +164,14 @@ def _verify_wire_configuration(configuration: dict[str, str], request: dict[str,
         )
 
     expected_effort = configuration["effort"]
-    if configuration["provider"] == "openai":
-        reasoning = body.get("reasoning")
-        actual_effort = body.get("reasoning_effort")
-        if actual_effort is None and isinstance(reasoning, dict):
-            actual_effort = reasoning.get("effort")
-    else:
-        output_config = body.get("output_config")
-        actual_effort = output_config.get("effort") if isinstance(output_config, dict) else None
-
+    actual_effort = _wire_effort(configuration["provider"], body)
+    if expected_effort == "default":
+        if actual_effort is not None:
+            raise HiveAdapterError(
+                "Hive/LiteLLM sent an explicit reasoning effort for effort=default; "
+                f"got {actual_effort!r}"
+            )
+        return
     if actual_effort != expected_effort:
         raise HiveAdapterError(
             "Hive/LiteLLM did not prove the requested reasoning effort on the post-transform wire body; "
