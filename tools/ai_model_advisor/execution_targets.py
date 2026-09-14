@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -81,6 +83,30 @@ def target_catalog() -> dict[str, dict[str, Any]]:
     return {profile.host: profile.as_dict() for profile in _PROFILES}
 
 
+def target_catalog_markdown() -> str:
+    lines = [
+        "# AI Model Advisor Execution Targets",
+        "",
+        "| Host | Adapter | Contract | Providers | Modes | Judge | Evidence |",
+        "|---|---|---:|---|---|---|---|",
+    ]
+    for profile in _PROFILES:
+        lines.append(
+            f"| `{profile.host}` | `{profile.adapter}` | {profile.adapter_contract_version} | "
+            f"{', '.join(profile.supported_providers)} | {', '.join(profile.execution_modes)} | "
+            f"{'required' if profile.requires_external_judge else 'optional'} | "
+            f"`{profile.evidence_method}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "Each target is a host/evidence contract, not an alias for execution_mode.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def profile_for_host(host: str) -> ExecutionTargetProfile:
     profile = _BY_HOST.get(host)
     if profile is None:
@@ -147,3 +173,24 @@ def configuration_blockers(
     if not effort:
         blockers.append("effort is missing")
     return blockers
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="List the AI Model Advisor execution-target capability catalog."
+    )
+    parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.json:
+        print(json.dumps(target_catalog(), indent=2, sort_keys=True))
+    else:
+        print(target_catalog_markdown(), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
