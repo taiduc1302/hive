@@ -46,11 +46,18 @@ def _write_plan(tmp_path, plan: dict):
     return plan_path
 
 
+def _expected_fixture(tmp_path):
+    path = tmp_path / "expected.txt"
+    path.write_text("fixed answer", encoding="utf-8")
+    return path
+
+
 def test_apply_rejects_runner_that_conflicts_with_bound_target_before_launch(
     tmp_path, monkeypatch
 ) -> None:
     plan_path = _write_plan(tmp_path, bind_execution_target(_plan(), "provider_api"))
     feedback_path = tmp_path / "feedback.jsonl"
+    expected_path = _expected_fixture(tmp_path)
     launched = False
 
     def forbidden_executor(*_args, **_kwargs):
@@ -72,10 +79,44 @@ def test_apply_rejects_runner_that_conflicts_with_bound_target_before_launch(
                 "--task",
                 "Return the fixed answer.",
                 "--apply",
+                "--expected-output-file",
+                str(expected_path),
                 "--runner",
                 "python",
                 "-m",
                 "tools.ai_model_advisor.hive_litellm_adapter",
+            ]
+        )
+
+    assert launched is False
+    assert not feedback_path.exists()
+
+
+def test_bound_target_requires_judge_before_runner_launch(tmp_path, monkeypatch) -> None:
+    plan_path = _write_plan(tmp_path, bind_execution_target(_plan(), "provider_api"))
+    feedback_path = tmp_path / "feedback.jsonl"
+    launched = False
+
+    def forbidden_executor(*_args, **_kwargs):
+        nonlocal launched
+        launched = True
+        raise AssertionError("command_executor must not run without required judge")
+
+    monkeypatch.setattr(experiment_run_cli, "command_executor", forbidden_executor)
+
+    with pytest.raises(ExperimentRunnerError, match="requires a deterministic outcome judge"):
+        experiment_run_cli.main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                "target-cli-01",
+                "--feedback",
+                str(feedback_path),
+                "--task",
+                "Return the fixed answer.",
+                "--apply",
+                "--use-target",
             ]
         )
 
@@ -88,6 +129,7 @@ def test_use_target_resolves_bound_provider_adapter_without_manual_runner(
 ) -> None:
     plan_path = _write_plan(tmp_path, bind_execution_target(_plan(), "provider_api"))
     feedback_path = tmp_path / "feedback.jsonl"
+    expected_path = _expected_fixture(tmp_path)
     captured_argv: list[str] = []
 
     def fake_command_executor(argv, _timeout_seconds):
@@ -97,7 +139,8 @@ def test_use_target_resolves_bound_provider_adapter_without_manual_runner(
             return {
                 "schema_version": 1,
                 "applied_configuration": payload["configuration"],
-                "outcome": "success",
+                "outcome": "partial",
+                "response_text": "fixed answer",
             }
 
         return execute
@@ -117,6 +160,8 @@ def test_use_target_resolves_bound_provider_adapter_without_manual_runner(
                 "Return the fixed answer.",
                 "--apply",
                 "--use-target",
+                "--expected-output-file",
+                str(expected_path),
             ]
         )
         == 0
@@ -126,7 +171,9 @@ def test_use_target_resolves_bound_provider_adapter_without_manual_runner(
         "-m",
         "tools.ai_model_advisor.provider_api_adapter",
     ]
-    assert len(feedback_path.read_text(encoding="utf-8").splitlines()) == 2
+    records = [json.loads(line) for line in feedback_path.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 2
+    assert {record["outcome"] for record in records} == {"success"}
 
 
 def test_use_target_requires_bound_plan_before_launch(tmp_path, monkeypatch) -> None:
