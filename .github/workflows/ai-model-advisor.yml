@@ -144,6 +144,40 @@ jobs:
             --json \
             > model-advisor-output/hive-experiment-preflight-smoke.json
 
+      - name: Bind experiment plan to direct provider execution target
+        run: |
+          python -m tools.ai_model_advisor.experiment_target \
+            --plan model-advisor-output/experiment-plan.json \
+            --host provider_api \
+            --output model-advisor-output/experiment-plan.provider-api.json
+
+      - name: Smoke-test direct provider experiment preflight offline
+        shell: bash
+        env:
+          OPENAI_API_KEY: ci-placeholder-no-network-call
+          ANTHROPIC_API_KEY: ci-placeholder-no-network-call
+        run: |
+          experiment_id="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path("model-advisor-output/experiment-plan.provider-api.json").read_text())
+          pairs = [pair for category in plan.get("categories", []) for pair in category.get("pairs", [])]
+          if not pairs:
+              raise SystemExit("experiment plan did not produce a pair for provider preflight smoke test")
+          print(pairs[0]["experiment_id"])
+          PY
+          )"
+          python -m tools.ai_model_advisor.provider_experiment_preflight \
+            --plan model-advisor-output/experiment-plan.provider-api.json \
+            --experiment-id "$experiment_id" \
+            > model-advisor-output/provider-experiment-preflight-smoke.md
+          python -m tools.ai_model_advisor.provider_experiment_preflight \
+            --plan model-advisor-output/experiment-plan.provider-api.json \
+            --experiment-id "$experiment_id" \
+            --json \
+            > model-advisor-output/provider-experiment-preflight-smoke.json
+
       - name: Smoke-test controlled experiment runner preview
         shell: bash
         run: |
@@ -205,6 +239,8 @@ jobs:
           cat model-advisor-output/hive-runtime-capabilities.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-experiment-preflight-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/provider-experiment-preflight-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/source-scan.md >> "$GITHUB_STEP_SUMMARY"
 
