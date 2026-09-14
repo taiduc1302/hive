@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-09-12",
+  "as_of": "2026-09-14",
   "policy": {"source_priority": ["official_provider_docs", "official_release_notes", "official_help", "community"], "community_default": "unverified", "recommend_limited_by_default": false},
   "official_sources": [
     {"id":"anthropic_models_overview","provider":"anthropic","url":"https://platform.claude.com/docs/en/models/overview","kind":"catalog"},
