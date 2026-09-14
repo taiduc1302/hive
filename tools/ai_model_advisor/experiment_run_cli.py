@@ -23,7 +23,11 @@ from .experiment_run import (
     runner_payload,
     task_sha256,
 )
-from .experiment_target import ExperimentTargetError, validate_runner_for_target
+from .experiment_target import (
+    ExperimentTargetError,
+    canonical_runner_for_target,
+    validate_runner_for_target,
+)
 from .feedback import EXACT_FEEDBACK_MIN, FeedbackStore
 
 
@@ -170,8 +174,8 @@ def preview_markdown(preview: dict[str, Any]) -> str:
         [
             "",
             (
-                "Run again with `--apply --runner ...` only after confirming that the adapter "
-                "can honor every configuration field shown above. The adapter must echo the "
+                "Run again with `--apply --use-target` for a bound plan, or with explicit "
+                "`--apply --runner ...` for an unbound/custom plan. The adapter must echo the "
                 "actual applied configuration in its result."
             ),
             "",
@@ -222,6 +226,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Actually launch both adapter runs and append the validated pair to feedback",
     )
     parser.add_argument(
+        "--use-target",
+        action="store_true",
+        help=(
+            "Resolve the canonical adapter from the plan's execution_target. "
+            "Use this for bound plans instead of repeating --runner argv."
+        ),
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=float,
         default=1800.0,
@@ -256,8 +268,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--runner",
         nargs=argparse.REMAINDER,
         help=(
-            "Adapter executable argv. It receives one JSON object on stdin and must print a JSON "
-            "result object as its last non-empty stdout line. Required only with --apply. "
+            "Adapter executable argv for unbound/custom execution. It receives one JSON object on "
+            "stdin and must print a JSON result object as its last non-empty stdout line. "
             "Place --runner last so following tokens belong to the adapter."
         ),
     )
@@ -268,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.judge and args.expected_output_file:
         raise ExperimentRunnerError("use either --judge or --expected-output-file, not both")
+    if args.use_target and args.runner:
+        raise ExperimentRunnerError("use either --use-target or --runner, not both")
 
     plan = _load_json_object(args.plan)
     feedback = FeedbackStore.load(args.feedback)
@@ -287,10 +301,16 @@ def main(argv: list[str] | None = None) -> int:
         _write_json(args.json_output, preview)
         return 0
 
-    runner_argv = list(args.runner or [])
-    if not runner_argv:
-        raise ExperimentRunnerError("--runner is required when --apply is used")
     try:
+        runner_argv = (
+            canonical_runner_for_target(plan)
+            if args.use_target
+            else list(args.runner or [])
+        )
+        if not runner_argv:
+            raise ExperimentRunnerError(
+                "--use-target or --runner is required when --apply is used"
+            )
         validate_runner_for_target(plan, runner_argv)
     except ExperimentTargetError as exc:
         raise ExperimentRunnerError(str(exc)) from exc
