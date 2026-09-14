@@ -13,6 +13,17 @@ _TARGETS: dict[str, dict[str, Any]] = {
         "adapter_contract_version": 1,
         "preflight_module": "tools.ai_model_advisor.hive_experiment_preflight",
     },
+    "provider_api": {
+        "host": "provider_api",
+        "adapter": "provider_api",
+        "adapter_contract_version": 1,
+        "preflight_module": "tools.ai_model_advisor.provider_experiment_preflight",
+    },
+}
+
+_ADAPTER_MODULES: dict[str, str] = {
+    "hive_litellm": "tools.ai_model_advisor.hive_litellm_adapter",
+    "provider_api": "tools.ai_model_advisor.provider_api_adapter",
 }
 
 
@@ -68,6 +79,43 @@ def target_summary(plan: dict[str, Any]) -> dict[str, Any]:
         "adapter": target.get("adapter"),
         "adapter_contract_version": target.get("adapter_contract_version"),
     }
+
+
+def _runner_module(argv: list[str]) -> str | None:
+    for index, token in enumerate(argv[:-1]):
+        if token == "-m":
+            return argv[index + 1]
+    for token in argv:
+        normalized = token.replace("\\", "/")
+        if normalized.endswith("hive_litellm_adapter.py"):
+            return "tools.ai_model_advisor.hive_litellm_adapter"
+        if normalized.endswith("provider_api_adapter.py"):
+            return "tools.ai_model_advisor.provider_api_adapter"
+    return None
+
+
+def validate_runner_for_target(plan: dict[str, Any], runner_argv: list[str]) -> None:
+    """Fail closed when a bound plan is executed through the wrong adapter.
+
+    Unbound legacy/generic plans remain compatible. A bound plan must execute
+    through the canonical adapter named by its execution-target contract.
+    """
+    summary = target_summary(plan)
+    if not summary["bound"]:
+        return
+    adapter = summary.get("adapter")
+    expected_module = _ADAPTER_MODULES.get(str(adapter))
+    if expected_module is None:
+        raise ExperimentTargetError(
+            f"Execution target adapter {adapter!r} has no registered runner module"
+        )
+    actual_module = _runner_module(runner_argv)
+    if actual_module != expected_module:
+        raise ExperimentTargetError(
+            "Bound experiment target requires runner module "
+            f"{expected_module!r}, but argv resolves to {actual_module!r}. "
+            "Rebind the plan deliberately instead of bypassing target provenance."
+        )
 
 
 def build_parser() -> argparse.ArgumentParser:
