@@ -34,6 +34,27 @@ The probe deliberately distinguishes host capability from Advisor adapter covera
 
 This prevents the router from turning a recommendation label into a fabricated runtime control.
 
+## Preflight one saved A/B experiment
+
+Use the host-specific preflight before choosing the Hive adapter for a saved experiment:
+
+```bash
+python -m tools.ai_model_advisor.hive_experiment_preflight \
+  --plan model-advisor-output/experiment-plan.json \
+  --experiment-id <experiment-id>
+```
+
+Add `--json` for machine-readable output. Add `--require-ready` when a script should exit with status `2` if the pair cannot be executed by the current Hive Advisor adapter.
+
+The preflight checks **both sides** of the saved pair. It blocks the pair when, for example:
+
+- either side requests an execution mode other than `single`;
+- either side uses a provider outside the current Hive Advisor adapter's `openai` / `anthropic` scope;
+- model or effort identity is missing;
+- Hive's post-transform wire-evidence transport is not available in the current runtime.
+
+A `ready` result means the host plumbing and adapter coverage are present. It still does not claim that the pinned LiteLLM build supports a specific newly released model ID. The real `--apply` run remains the final proof boundary.
+
 ## Model and effort proof
 
 A successful offline capability probe does **not** prove that a particular current model ID or effort level is supported by the pinned LiteLLM version.
@@ -46,11 +67,12 @@ For model-specific evidence, the real Hive adapter must still make the provider 
 
 The Advisor registry can be newer than the execution stack. A fresh registry entry means “this model currently exists according to the authoritative provider source”; it does **not** mean an older local LiteLLM build can route it correctly.
 
-The capability probe gives the experiment runner a cheap preflight layer:
+The capability/preflight path is:
 
 ```text
 registry recommendation
     -> offline host capability probe
+    -> saved-pair Hive preflight
     -> preview experiment
     -> explicit --apply
     -> post-transform wire proof
@@ -58,4 +80,4 @@ registry recommendation
     -> paired feedback evidence
 ```
 
-This keeps recommendation freshness, host compatibility, and empirical evidence as separate facts instead of assuming one implies the others.
+This keeps recommendation freshness, host compatibility, adapter coverage, and empirical evidence as separate facts instead of assuming one implies the others.
