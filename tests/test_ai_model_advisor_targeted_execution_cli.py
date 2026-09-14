@@ -40,15 +40,17 @@ def _plan() -> dict:
     }
 
 
+def _write_plan(tmp_path, plan: dict):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    return plan_path
+
+
 def test_apply_rejects_runner_that_conflicts_with_bound_target_before_launch(
     tmp_path, monkeypatch
 ) -> None:
-    plan_path = tmp_path / "plan.json"
+    plan_path = _write_plan(tmp_path, bind_execution_target(_plan(), "provider_api"))
     feedback_path = tmp_path / "feedback.jsonl"
-    plan_path.write_text(
-        json.dumps(bind_execution_target(_plan(), "provider_api")),
-        encoding="utf-8",
-    )
     launched = False
 
     def forbidden_executor(*_args, **_kwargs):
@@ -79,3 +81,105 @@ def test_apply_rejects_runner_that_conflicts_with_bound_target_before_launch(
 
     assert launched is False
     assert not feedback_path.exists()
+
+
+def test_use_target_resolves_bound_provider_adapter_without_manual_runner(
+    tmp_path, monkeypatch
+) -> None:
+    plan_path = _write_plan(tmp_path, bind_execution_target(_plan(), "provider_api"))
+    feedback_path = tmp_path / "feedback.jsonl"
+    captured_argv: list[str] = []
+
+    def fake_command_executor(argv, _timeout_seconds):
+        captured_argv.extend(argv)
+
+        def execute(payload):
+            return {
+                "schema_version": 1,
+                "applied_configuration": payload["configuration"],
+                "outcome": "success",
+            }
+
+        return execute
+
+    monkeypatch.setattr(experiment_run_cli, "command_executor", fake_command_executor)
+
+    assert (
+        experiment_run_cli.main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                "target-cli-01",
+                "--feedback",
+                str(feedback_path),
+                "--task",
+                "Return the fixed answer.",
+                "--apply",
+                "--use-target",
+            ]
+        )
+        == 0
+    )
+
+    assert captured_argv[1:] == [
+        "-m",
+        "tools.ai_model_advisor.provider_api_adapter",
+    ]
+    assert len(feedback_path.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_use_target_requires_bound_plan_before_launch(tmp_path, monkeypatch) -> None:
+    plan_path = _write_plan(tmp_path, _plan())
+    feedback_path = tmp_path / "feedback.jsonl"
+    launched = False
+
+    def forbidden_executor(*_args, **_kwargs):
+        nonlocal launched
+        launched = True
+        raise AssertionError("command_executor must not run for an unbound --use-target plan")
+
+    monkeypatch.setattr(experiment_run_cli, "command_executor", forbidden_executor)
+
+    with pytest.raises(ExperimentRunnerError, match="bind an execution target first"):
+        experiment_run_cli.main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                "target-cli-01",
+                "--feedback",
+                str(feedback_path),
+                "--task",
+                "Return the fixed answer.",
+                "--apply",
+                "--use-target",
+            ]
+        )
+
+    assert launched is False
+    assert not feedback_path.exists()
+
+
+def test_use_target_and_runner_are_mutually_exclusive(tmp_path) -> None:
+    plan_path = _write_plan(tmp_path, bind_execution_target(_plan(), "provider_api"))
+
+    with pytest.raises(ExperimentRunnerError, match="either --use-target or --runner"):
+        experiment_run_cli.main(
+            [
+                "--plan",
+                str(plan_path),
+                "--experiment-id",
+                "target-cli-01",
+                "--feedback",
+                str(tmp_path / "feedback.jsonl"),
+                "--task",
+                "Return the fixed answer.",
+                "--apply",
+                "--use-target",
+                "--runner",
+                "python",
+                "-m",
+                "tools.ai_model_advisor.provider_api_adapter",
+            ]
+        )
