@@ -161,7 +161,7 @@ def configuration_blockers(
     blockers: list[str] = []
     if provider not in profile.supported_providers:
         blockers.append(
-            f"adapter supports {', '.join(profile.supported_providers)}, not {provider or 'missing'}"
+            f"adapter supports {'/'.join(profile.supported_providers)}, not {provider or 'missing'}"
         )
     if execution_mode not in profile.execution_modes:
         blockers.append(
