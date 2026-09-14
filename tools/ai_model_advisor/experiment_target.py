@@ -92,6 +92,10 @@ def canonical_runner_for_target(
     python_executable: str | None = None,
 ) -> list[str]:
     """Return canonical argv for a bound execution target."""
+    if not target_summary(plan)["bound"]:
+        raise ExperimentTargetError(
+            "Cannot resolve a canonical runner for an unbound plan; bind an execution target first"
+        )
     profile = _profile_from_bound_plan(plan)
     return [python_executable or sys.executable, "-m", profile.runner_module]
 
