@@ -26,6 +26,10 @@ _ADAPTER_MODULES: dict[str, str] = {
     "hive_litellm": "tools.ai_model_advisor.hive_litellm_adapter",
     "provider_api": "tools.ai_model_advisor.provider_api_adapter",
 }
+_ADAPTER_POLICIES: dict[str, dict[str, bool]] = {
+    "hive_litellm": {"requires_external_judge": True},
+    "provider_api": {"requires_external_judge": True},
+}
 
 
 class ExperimentTargetError(ValueError):
@@ -80,6 +84,14 @@ def target_summary(plan: dict[str, Any]) -> dict[str, Any]:
         "adapter": target.get("adapter"),
         "adapter_contract_version": target.get("adapter_contract_version"),
     }
+
+
+def target_requires_external_judge(plan: dict[str, Any]) -> bool:
+    summary = target_summary(plan)
+    if not summary["bound"]:
+        return False
+    policy = _ADAPTER_POLICIES.get(str(summary.get("adapter")), {})
+    return bool(policy.get("requires_external_judge"))
 
 
 def canonical_runner_for_target(
