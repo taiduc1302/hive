@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,30 @@ def target_summary(plan: dict[str, Any]) -> dict[str, Any]:
         "adapter": target.get("adapter"),
         "adapter_contract_version": target.get("adapter_contract_version"),
     }
+
+
+def canonical_runner_for_target(
+    plan: dict[str, Any],
+    *,
+    python_executable: str | None = None,
+) -> list[str]:
+    """Return canonical argv for a bound execution target.
+
+    This is intentionally unavailable for unbound plans: custom/generic
+    execution must remain explicit rather than guessing a host.
+    """
+    summary = target_summary(plan)
+    if not summary["bound"]:
+        raise ExperimentTargetError(
+            "Cannot resolve a canonical runner for an unbound plan; bind an execution target first"
+        )
+    adapter = summary.get("adapter")
+    module = _ADAPTER_MODULES.get(str(adapter))
+    if module is None:
+        raise ExperimentTargetError(
+            f"Execution target adapter {adapter!r} has no registered runner module"
+        )
+    return [python_executable or sys.executable, "-m", module]
 
 
 def _runner_module(argv: list[str]) -> str | None:
