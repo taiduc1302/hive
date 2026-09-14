@@ -53,7 +53,7 @@ def test_target_plan_is_bound_at_creation() -> None:
         "bound": True,
         "host": "hive",
         "adapter": "hive_litellm",
-        "adapter_contract_version": "contract-v1",
+        "adapter_contract_version": 1,
     }
     assert plan["routing_scope"]["execution_target"] == "hive"
 
