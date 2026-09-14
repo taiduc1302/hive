@@ -7,6 +7,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .execution_targets import (
+    configuration_blockers,
+    profile_for_host,
+    target_binding_blockers,
+)
 from .experiment_run import ExperimentRunnerError, find_experiment
 from .experiment_target import target_summary
 from .registry import ModelRegistry
@@ -38,35 +43,19 @@ def evaluate_provider_experiment_preflight(
     registry: ModelRegistry | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Validate a saved pair for the built-in direct OpenAI/Anthropic adapter.
-
-    The preflight performs no provider call. It proves only that the saved
-    configuration is representable by the adapter and that the required
-    credential is present in the current environment.
-    """
+    """Validate a saved pair for the built-in direct OpenAI/Anthropic adapter."""
     pair = find_experiment(plan, experiment_id)
     models = _model_lookup(registry or ModelRegistry())
     env = environ if environ is not None else os.environ
+    profile = profile_for_host("provider_api")
+    raw_target = plan.get("execution_target")
     target = target_summary(plan)
 
-    target_blockers: list[str] = []
-    if not target["bound"]:
-        target_blockers.append("plan is not bound to an execution target")
-    else:
-        if target["host"] != "provider_api":
-            target_blockers.append(
-                f"plan is bound to host={target['host']!r}, not 'provider_api'"
-            )
-        if target["adapter"] != "provider_api":
-            target_blockers.append(
-                f"plan is bound to adapter={target['adapter']!r}, not 'provider_api'"
-            )
-        if target["adapter_contract_version"] != 1:
-            target_blockers.append(
-                "plan uses an unsupported provider-api adapter contract version "
-                f"{target['adapter_contract_version']!r}"
-            )
-
+    target_blockers = target_binding_blockers(
+        raw_target if isinstance(raw_target, dict) else None,
+        profile,
+        allow_unbound=False,
+    )
     blockers = [f"target: {reason}" for reason in target_blockers]
     sides: dict[str, dict[str, Any]] = {}
 
@@ -76,34 +65,20 @@ def evaluate_provider_experiment_preflight(
         model_id = str(config.get("model_id") or "")
         effort = str(config.get("effort") or "")
         execution_mode = str(config.get("execution_mode") or "")
-        side_blockers: list[str] = []
-
-        if provider not in {"openai", "anthropic"}:
-            side_blockers.append(
-                f"direct provider adapter supports openai/anthropic, not {provider or 'missing'}"
-            )
-        if execution_mode != "single":
-            side_blockers.append(
-                "direct provider adapter supports execution_mode=single, "
-                f"not {execution_mode or 'missing'}"
-            )
+        side_blockers = configuration_blockers(config, profile)
 
         model = models.get((provider, model_id))
         if model is None:
             side_blockers.append(
                 f"registry does not contain provider/model {provider or 'missing'}/{model_id or 'missing'}"
             )
-        elif effort not in model.efforts:
+        elif effort and effort not in model.efforts:
             side_blockers.append(
-                f"effort={effort or 'missing'} is not declared for registry model {model_id}; "
+                f"effort={effort} is not declared for registry model {model_id}; "
                 f"allowed: {', '.join(model.efforts)}"
             )
 
-        credential_name = None
-        if provider == "openai":
-            credential_name = "OPENAI_API_KEY"
-        elif provider == "anthropic":
-            credential_name = "ANTHROPIC_API_KEY"
+        credential_name = profile.credential_env_by_provider.get(provider)
         if credential_name and not env.get(credential_name):
             side_blockers.append(f"{credential_name} is not set")
 
@@ -122,12 +97,13 @@ def evaluate_provider_experiment_preflight(
         }
 
     return {
-        "schema_version": 1,
-        "host": "provider_api",
+        "schema_version": 2,
+        "host": profile.host,
         "experiment_id": experiment_id,
         "category": pair.get("category"),
         "kind": pair.get("kind"),
         "execution_target": target,
+        "target_profile": profile.as_dict(),
         "target_ready": not target_blockers,
         "ready": not blockers,
         "sides": sides,
