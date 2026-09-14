@@ -23,6 +23,7 @@ from .experiment_run import (
     runner_payload,
     task_sha256,
 )
+from .experiment_target import ExperimentTargetError, validate_runner_for_target
 from .feedback import EXACT_FEEDBACK_MIN, FeedbackStore
 
 
@@ -289,6 +290,10 @@ def main(argv: list[str] | None = None) -> int:
     runner_argv = list(args.runner or [])
     if not runner_argv:
         raise ExperimentRunnerError("--runner is required when --apply is used")
+    try:
+        validate_runner_for_target(plan, runner_argv)
+    except ExperimentTargetError as exc:
+        raise ExperimentRunnerError(str(exc)) from exc
 
     if args.expected_output_file:
         judge = _expected_output_judge(
