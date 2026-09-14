@@ -2,6 +2,31 @@
 
 Experiment plans are intentionally host-agnostic when they are created. A recommendation such as `single`, `subagents`, or `dynamic_workflow` describes the desired execution shape; it does not prove that a particular host can execute it.
 
+## Discover the supported target catalog
+
+Execution-target capabilities are declared once in `tools.ai_model_advisor.execution_targets` and are available as Markdown or JSON:
+
+```bash
+python -m tools.ai_model_advisor.execution_targets
+python -m tools.ai_model_advisor.execution_targets --json
+```
+
+The catalog is the shared source of truth for:
+
+- host and adapter identity;
+- adapter contract version;
+- canonical runner module;
+- preflight module;
+- supported providers;
+- supported execution modes;
+- deterministic-judge requirement;
+- provider credential environment variables;
+- evidence method used by the target.
+
+`experiment_target`, Hive preflight, direct-provider preflight, canonical runner resolution, and judge policy consume this catalog instead of maintaining separate target tables.
+
+## Bind a plan to an execution target
+
 Before a plan enters a host-specific benchmark workflow, bind a copy of the saved plan to an explicit execution target.
 
 For Hive:
@@ -22,7 +47,7 @@ python -m tools.ai_model_advisor.experiment_target \
   --output model-advisor-output/experiment-plan.provider-api.json
 ```
 
-The binding adds an explicit contract. Hive uses:
+The binding adds a compact immutable target identity. Hive uses:
 
 ```json
 {
@@ -68,7 +93,10 @@ Target binding is enforced during `experiment-run --apply`, not merely documente
 - An unbound legacy/generic plan may still use a custom runner for backward compatibility.
 - A plan bound to `hive / hive_litellm` must use the canonical Hive adapter module.
 - A plan bound to `provider_api / provider_api` must use the built-in direct provider adapter module.
-- A mismatched runner is rejected **before** `command_executor` is created and before any provider credentials, network calls, or benchmark feedback are used.
+- Prefer `--use-target` for bound plans; it resolves canonical runner argv from the catalog automatically.
+- `--use-target` and manual `--runner` are mutually exclusive.
+- Built-in bound targets require deterministic acceptance evidence before the adapter process launches.
+- A mismatched runner is rejected before `command_executor` is created and before any provider credentials, network calls, or benchmark feedback are used.
 
 To switch execution systems, rebind the saved plan deliberately with `experiment-target --replace`. Do not bypass provenance by swapping `--runner` argv on an already-bound plan.
 
@@ -76,12 +104,7 @@ To switch execution systems, rebind the saved plan deliberately with `experiment
 
 `tools.ai_model_advisor.hive_experiment_preflight` accepts legacy unbound plans for backward compatibility and labels them `unbound (legacy/generic plan)`.
 
-When `execution_target` is present, Hive preflight fails closed if:
-
-- `host` is not `hive`;
-- `adapter` is not `hive_litellm`;
-- `adapter_contract_version` is not supported;
-- either A/B side requests a provider, execution mode, or runtime capability outside the current adapter contract.
+Shared provider/mode/target checks come from the execution-target catalog. Hive-specific preflight additionally verifies the local runtime's single-call post-transform wire-evidence readiness.
 
 A successful target check still does not prove that an individual model ID is supported by the installed LiteLLM/provider combination. Exact model and effort remain subject to post-transform wire verification during explicit `--apply` execution.
 
@@ -97,27 +120,21 @@ python -m tools.ai_model_advisor.provider_experiment_preflight \
   --require-ready
 ```
 
-This preflight performs **no provider/network call**. It checks:
-
-- the plan is explicitly bound to `provider_api / provider_api / contract-v1`;
-- both sides use `execution_mode=single`;
-- each provider/model pair exists in the committed Advisor registry;
-- each requested effort is declared by that registry model, including `default` for models such as Claude Haiku 4.5 where Advisor intentionally omits an explicit effort control;
-- the required `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` exists in the current environment.
+This preflight performs **no provider/network call**. Shared target/provider/mode/credential rules come from the catalog. Direct-provider-specific checks additionally verify that each provider/model pair exists in the Advisor registry and that the requested effort is declared for that model, including `default` for models such as Claude Haiku 4.5 where Advisor intentionally omits an explicit effort control.
 
 Credential presence and registry compatibility are readiness checks, not proof of provider acceptance. The real adapter still has to execute the exact saved configuration, echo `applied_configuration`, and use deterministic acceptance criteria before feedback becomes model evidence.
 
 ## Recommended controlled flow
 
 ```text
-experiment-plan.json
+execution-target catalog
+    -> experiment-plan.json
     -> bind execution target
     -> target-specific preflight
     -> generic preview
-    -> explicit --apply with the matching bound adapter
+    -> explicit --apply --use-target + deterministic judge
     -> wire/applied-configuration proof
-    -> deterministic judge
     -> paired feedback evidence
 ```
 
-This keeps host provenance auditable without coupling the generic experiment planner to one execution environment, and makes a target/runner mismatch a hard error instead of a documentation-only warning.
+This keeps host provenance auditable without coupling the generic experiment planner to one execution environment, and makes target/runner/policy drift testable instead of documentation-only.
