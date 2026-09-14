@@ -5,8 +5,9 @@ import importlib.metadata
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 _PIN_RE = re.compile(r"\blitellm\s*==\s*([0-9][0-9A-Za-z.+-]*)", re.IGNORECASE)
 _PIN_CANDIDATES = (
