@@ -7,13 +7,53 @@ Load this reference when executing, previewing, or interpreting an Advisor contr
 Use this order:
 
 1. Generate and save a fixed `experiment-plan` JSON.
-2. Preview the selected pair with `experiment-run`; do not use `--apply` yet.
-3. Confirm the adapter can honor the exact provider, model, effort, and execution mode shown for both sides.
-4. When objective acceptance criteria can be automated, use a deterministic judge and prefer it over adapter self-reporting.
-5. Run with explicit `--apply --runner ...` only when real execution is intended.
-6. Repeat on distinct benchmark tasks until the live evidence threshold is met.
-7. Run `experiment-evaluate` on the same saved plan.
-8. Run `experiment-impact` before changing normal routing defaults.
+2. Bind a copy to an explicit execution target when using a built-in host integration (`hive` or `provider_api`).
+3. Run that target's preflight before spending provider credits.
+4. Preview the selected pair with `experiment-run`; do not use `--apply` yet.
+5. Confirm the exact provider, model, effort, and execution mode shown for both sides.
+6. Use a deterministic judge for built-in bound targets; both canonical adapters require external acceptance evidence.
+7. For a bound plan, execute with explicit `--apply --use-target`. For an intentionally unbound/custom plan, use `--apply --runner ...`.
+8. Repeat on distinct benchmark tasks until the live evidence threshold is met.
+9. Run `experiment-evaluate` on the same saved plan.
+10. Run `experiment-impact` before changing normal routing defaults.
+
+## Execution-target provenance
+
+A bound plan is an execution contract, not a label.
+
+Supported built-in targets are currently:
+
+- `hive` → `tools.ai_model_advisor.hive_litellm_adapter`;
+- `provider_api` → `tools.ai_model_advisor.provider_api_adapter`.
+
+Bind first:
+
+```bash
+python -m tools.ai_model_advisor.experiment_target \
+  --plan /tmp/experiment-plan.json \
+  --host provider_api \
+  --output /tmp/experiment-plan.provider-api.json
+```
+
+Then run the target-specific preflight. Direct provider example:
+
+```bash
+python -m tools.ai_model_advisor.provider_experiment_preflight \
+  --plan /tmp/experiment-plan.provider-api.json \
+  --experiment-id implementation-model-abc123 \
+  --require-ready
+```
+
+Hive uses `tools.ai_model_advisor.hive_experiment_preflight` instead.
+
+When a plan is bound:
+
+- `experiment-run --apply` validates that any manual `--runner` resolves to the canonical adapter in the binding;
+- prefer `--use-target`, which derives canonical argv from the saved target and removes manual adapter selection entirely;
+- do not swap `--runner` to another host on a bound plan; deliberately rebind with `experiment_target --replace` instead;
+- built-in bound targets require a deterministic judge before the adapter process is launched.
+
+Unbound legacy/generic plans remain available for custom adapters, but their host provenance is necessarily weaker and must stay explicit.
 
 ## Preview rule
 
@@ -32,11 +72,11 @@ Reject evidence when `applied_configuration` differs from the saved plan. Never 
 
 Use `effort=default` only when the registry intentionally means **provider default with no explicit effort knob sent**. This is not an alias for `medium` or `high`, and it must not be treated as proof that a provider used a specific internal reasoning depth.
 
-Use argv execution, not a shell string. Place `--runner` last because it consumes the remainder of the command line.
+For custom unbound execution, use argv rather than a shell string. Place `--runner` last because it consumes the remainder of the command line.
 
 ## Built-in direct provider adapter
 
-For single-call API benchmarks, use:
+For single-call API benchmarks, the `provider_api` target resolves to:
 
 ```bash
 python -m tools.ai_model_advisor.provider_api_adapter
@@ -50,15 +90,17 @@ Rules:
 - use `effort=default` for registry models whose current provider API exposes no supported effort control, such as Claude Haiku 4.5;
 - keys come only from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`;
 - unsupported orchestration modes are rejected rather than approximated;
-- the adapter requires `acceptance_mode=external_judge`, so use it only with a deterministic judge;
+- the adapter requires `acceptance_mode=external_judge`;
 - the adapter returns candidate `response_text` plus token/cache telemetry for judging/diagnostics;
 - Anthropic cache-read/cache-creation usage is normalized into total input tokens for Advisor invariants;
 - if OpenAI explicitly echoes a different reasoning effort for a non-default request, reject the observation;
 - do not invent USD cost when the API response does not contain authoritative request cost.
 
+The direct-provider preflight is offline: it verifies target binding, registry model/effort compatibility, `single` execution mode, and credential presence, but it never treats those checks as proof that the provider accepted the request.
+
 ## Built-in Hive LiteLLM adapter
 
-When the question is how a model/effort behaves through Hive's own LLM transport rather than through a direct provider HTTP call, use:
+The `hive` target resolves to:
 
 ```bash
 python -m tools.ai_model_advisor.hive_litellm_adapter
@@ -83,42 +125,41 @@ Use this adapter to test **transport compatibility through Hive**. Build a separ
 
 Prefer a judge when correctness can be checked independently: tests, schema validation, fixed expected values, artifact checks, static analysis, or another deterministic contract.
 
+For built-in bound targets it is mandatory. The runner rejects `--apply` before launching the adapter if neither a built-in expected-output fixture nor an external `--judge` is present.
+
 The judge receives task/configuration metadata plus the complete adapter result. It returns schema v1 with `outcome` = `success`, `partial`, or `failure`. Its outcome replaces adapter self-report while adapter latency/cost/token telemetry stays unchanged.
 
 Judge timeout, launch failure, non-zero exit, malformed JSON, invalid schema/outcome, or checker-infrastructure failure invalidates the pair and creates no model evidence.
 
 ### Built-in expected-output judge
 
-For simple text/JSON benchmarks, use `expected_output_judge` with modes `exact`, `strip-exact`, `contains`, or `json-equal`.
+For simple text/JSON benchmarks, use modes `exact`, `strip-exact`, `contains`, or `json-equal`.
 
-Standalone runner can use the in-process flags:
+Bound target example:
 
 ```bash
 python -m tools.ai_model_advisor.experiment_run_cli \
-  --plan /tmp/experiment-plan.json \
+  --plan /tmp/experiment-plan.provider-api.json \
   --experiment-id implementation-model-abc123 \
   --feedback ~/.hive/model-feedback.jsonl \
   --task-file ./benchmarks/task.md \
   --apply \
+  --use-target \
   --expected-output-file ./benchmarks/expected.json \
-  --expected-output-mode json-equal \
-  --runner python -m tools.ai_model_advisor.provider_api_adapter
+  --expected-output-mode json-equal
 ```
 
-For the main Advisor CLI, configure the same judge through environment variables so the nested judge command needs no flags:
+For a custom external judge:
 
 ```bash
-export AI_MODEL_ADVISOR_EXPECTED_OUTPUT_FILE=./benchmarks/expected.json
-export AI_MODEL_ADVISOR_EXPECTED_OUTPUT_MODE=json-equal
-
-python -m tools.ai_model_advisor.cli experiment-run \
-  --plan /tmp/experiment-plan.json \
+python -m tools.ai_model_advisor.experiment_run_cli \
+  --plan /tmp/experiment-plan.provider-api.json \
   --experiment-id implementation-model-abc123 \
   --feedback ~/.hive/model-feedback.jsonl \
   --task-file ./benchmarks/task.md \
   --apply \
-  --judge python -m tools.ai_model_advisor.expected_output_judge \
-  --runner python -m tools.ai_model_advisor.provider_api_adapter
+  --judge python ./check_endpoint.py \
+  --use-target
 ```
 
 Invalid expected JSON is checker configuration failure. Invalid candidate JSON is a benchmark/model failure under `json-equal`.
@@ -133,6 +174,8 @@ Do not record these as model failures:
 - malformed/non-object JSON;
 - schema mismatch;
 - unsupported requested configuration;
+- execution-target/runner mismatch;
+- missing required judge for a bound adapter;
 - applied-configuration mismatch;
 - acceptance-checker infrastructure failure.
 
