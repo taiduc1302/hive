@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .experiment_run import ExperimentRunnerError, find_experiment
+from .experiment_target import target_summary
 from .runtime_capabilities import build_capability_report
 
 
@@ -34,9 +35,27 @@ def evaluate_hive_experiment_preflight(
     pair = find_experiment(plan, experiment_id)
     capabilities = capability_report or build_capability_report()
     single_ready = bool(capabilities.get("transport", {}).get("single_call_evidence_ready"))
+    target = target_summary(plan)
+
+    blockers: list[str] = []
+    target_blockers: list[str] = []
+    if target["bound"]:
+        if target["host"] != "hive":
+            target_blockers.append(
+                f"plan is bound to host={target['host']!r}, not 'hive'"
+            )
+        if target["adapter"] != "hive_litellm":
+            target_blockers.append(
+                f"plan is bound to adapter={target['adapter']!r}, not 'hive_litellm'"
+            )
+        if target["adapter_contract_version"] != 1:
+            target_blockers.append(
+                "plan uses an unsupported Hive adapter contract version "
+                f"{target['adapter_contract_version']!r}"
+            )
+    blockers.extend(f"target: {reason}" for reason in target_blockers)
 
     sides: dict[str, dict[str, Any]] = {}
-    blockers: list[str] = []
     for side in ("A", "B"):
         config = _side_configuration(pair, side)
         execution_mode = str(config.get("execution_mode") or "")
@@ -74,29 +93,41 @@ def evaluate_hive_experiment_preflight(
         }
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "host": "hive",
         "experiment_id": experiment_id,
         "category": pair.get("category"),
         "kind": pair.get("kind"),
+        "execution_target": target,
+        "target_bound": bool(target["bound"]),
+        "target_ready": not target_blockers,
+        "target_blockers": target_blockers,
         "ready": not blockers,
         "sides": sides,
         "blockers": blockers,
         "runtime": capabilities,
         "evidence_boundary": (
-            "Preflight proves local host plumbing only. A real --apply run must still prove the exact "
-            "model and effort on Hive's post-transform request body before evidence is accepted."
+            "Preflight proves local host plumbing and execution-target compatibility only. "
+            "A real --apply run must still prove the exact model and effort on Hive's "
+            "post-transform request body before evidence is accepted."
         ),
     }
 
 
 def render_markdown(report: dict[str, Any]) -> str:
+    target = report.get("execution_target") or {}
+    target_text = (
+        f"{target.get('host')} / {target.get('adapter')} / contract-v{target.get('adapter_contract_version')}"
+        if report.get("target_bound")
+        else "unbound (legacy/generic plan)"
+    )
     lines = [
         "# Hive Experiment Preflight",
         "",
         f"Experiment: `{report['experiment_id']}`",
         f"Category: **{report.get('category') or 'unknown'}**",
         f"Kind: **{report.get('kind') or 'unknown'}**",
+        f"Execution target: **{target_text}**",
         f"Ready for Hive adapter: **{'yes' if report['ready'] else 'no'}**",
         "",
         "## Sides",
