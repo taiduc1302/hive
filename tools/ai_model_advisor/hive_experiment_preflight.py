@@ -5,6 +5,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .execution_targets import (
+    configuration_blockers,
+    profile_for_host,
+    target_binding_blockers,
+)
 from .experiment_run import ExperimentRunnerError, find_experiment
 from .experiment_target import target_summary
 from .runtime_capabilities import build_capability_report
@@ -35,25 +40,16 @@ def evaluate_hive_experiment_preflight(
     pair = find_experiment(plan, experiment_id)
     capabilities = capability_report or build_capability_report()
     single_ready = bool(capabilities.get("transport", {}).get("single_call_evidence_ready"))
+    profile = profile_for_host("hive")
+    raw_target = plan.get("execution_target")
     target = target_summary(plan)
 
-    blockers: list[str] = []
-    target_blockers: list[str] = []
-    if target["bound"]:
-        if target["host"] != "hive":
-            target_blockers.append(
-                f"plan is bound to host={target['host']!r}, not 'hive'"
-            )
-        if target["adapter"] != "hive_litellm":
-            target_blockers.append(
-                f"plan is bound to adapter={target['adapter']!r}, not 'hive_litellm'"
-            )
-        if target["adapter_contract_version"] != 1:
-            target_blockers.append(
-                "plan uses an unsupported Hive adapter contract version "
-                f"{target['adapter_contract_version']!r}"
-            )
-    blockers.extend(f"target: {reason}" for reason in target_blockers)
+    target_blockers = target_binding_blockers(
+        raw_target if isinstance(raw_target, dict) else None,
+        profile,
+        allow_unbound=True,
+    )
+    blockers = [f"target: {reason}" for reason in target_blockers]
 
     sides: dict[str, dict[str, Any]] = {}
     for side in ("A", "B"):
@@ -63,19 +59,7 @@ def evaluate_hive_experiment_preflight(
         model_id = str(config.get("model_id") or "")
         effort = str(config.get("effort") or "")
 
-        side_blockers: list[str] = []
-        if execution_mode != "single":
-            side_blockers.append(
-                f"Hive Advisor adapter supports execution_mode=single, not {execution_mode or 'missing'}"
-            )
-        if provider not in {"openai", "anthropic"}:
-            side_blockers.append(
-                f"Hive Advisor adapter supports openai/anthropic, not {provider or 'missing'}"
-            )
-        if not model_id:
-            side_blockers.append("model_id is missing")
-        if not effort:
-            side_blockers.append("effort is missing")
+        side_blockers = configuration_blockers(config, profile)
         if not single_ready:
             side_blockers.append("Hive single-call wire-evidence transport is not ready in this runtime")
 
@@ -93,12 +77,13 @@ def evaluate_hive_experiment_preflight(
         }
 
     return {
-        "schema_version": 2,
-        "host": "hive",
+        "schema_version": 3,
+        "host": profile.host,
         "experiment_id": experiment_id,
         "category": pair.get("category"),
         "kind": pair.get("kind"),
         "execution_target": target,
+        "target_profile": profile.as_dict(),
         "target_bound": bool(target["bound"]),
         "target_ready": not target_blockers,
         "target_blockers": target_blockers,
