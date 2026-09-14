@@ -1,6 +1,7 @@
 """AI Model Advisor: current-model tracking and workload-aware routing."""
 
 from .activity import ActivityAnalyzer
+from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
@@ -13,7 +14,8 @@ __all__ = [
     "ModelRegistry",
     "RecommendationEngine",
     "UsageRecord",
+    "build_empirical_leaderboard",
     "build_target_experiment_plan",
     "recommend_for_target",
 ]
-__version__ = "0.14.0"
+__version__ = "0.15.0"
