@@ -26,6 +26,7 @@ from .experiment_run import (
 from .experiment_target import (
     ExperimentTargetError,
     canonical_runner_for_target,
+    target_requires_external_judge,
     validate_runner_for_target,
 )
 from .feedback import EXACT_FEEDBACK_MIN, FeedbackStore
@@ -300,6 +301,14 @@ def main(argv: list[str] | None = None) -> int:
         _write_or_print(args.output, preview_markdown(preview))
         _write_json(args.json_output, preview)
         return 0
+
+    if target_requires_external_judge(plan) and not (
+        args.expected_output_file or args.judge
+    ):
+        raise ExperimentRunnerError(
+            "bound execution target requires a deterministic outcome judge; "
+            "provide --expected-output-file or --judge before --apply"
+        )
 
     try:
         runner_argv = (
