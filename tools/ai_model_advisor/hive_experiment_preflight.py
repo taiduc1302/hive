@@ -30,6 +30,17 @@ def _side_configuration(pair: dict[str, Any], side: str) -> dict[str, Any]:
     return config
 
 
+def _hive_compatible_target_blockers(blockers: list[str]) -> list[str]:
+    """Preserve legacy Hive-facing blocker wording across catalog refactors."""
+    return [
+        reason.replace(
+            "plan uses unsupported adapter contract version",
+            "plan uses an unsupported Hive adapter contract version",
+        )
+        for reason in blockers
+    ]
+
+
 def evaluate_hive_experiment_preflight(
     plan: dict[str, Any],
     experiment_id: str,
@@ -44,10 +55,12 @@ def evaluate_hive_experiment_preflight(
     raw_target = plan.get("execution_target")
     target = target_summary(plan)
 
-    target_blockers = target_binding_blockers(
-        raw_target if isinstance(raw_target, dict) else None,
-        profile,
-        allow_unbound=True,
+    target_blockers = _hive_compatible_target_blockers(
+        target_binding_blockers(
+            raw_target if isinstance(raw_target, dict) else None,
+            profile,
+            allow_unbound=True,
+        )
     )
     blockers = [f"target: {reason}" for reason in target_blockers]
 
