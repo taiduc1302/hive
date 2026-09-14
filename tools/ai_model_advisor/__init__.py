@@ -4,6 +4,7 @@ from .activity import ActivityAnalyzer
 from .feedback import FeedbackStore, UsageRecord
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
+from .target_experiment_plan import build_target_experiment_plan
 from .target_routing import recommend_for_target
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "ModelRegistry",
     "RecommendationEngine",
     "UsageRecord",
+    "build_target_experiment_plan",
     "recommend_for_target",
 ]
-__version__ = "0.13.0"
+__version__ = "0.14.0"
