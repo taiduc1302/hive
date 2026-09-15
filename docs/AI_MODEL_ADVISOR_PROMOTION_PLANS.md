@@ -7,8 +7,9 @@ The intended flow is:
 1. `feedback-leaderboard` determines whether controlled evidence supports `promote`, `hold`, `collect_more`, or `insufficient_evidence`.
 2. `routing-proposals` compares that empirical result with the current router primary.
 3. `promotion-plan` converts only `propose_change` cases into a fresh matched-canary plan.
-4. An operator runs the required controlled trials separately.
-5. The feedback is re-evaluated. Only if the same candidate still satisfies the promotion rules does the change become eligible for a separate human-reviewed router edit.
+4. An operator runs the required controlled trials separately and records them in a dedicated canary feedback JSONL file.
+5. v0.18 `canary_evaluate` evaluates only that fresh matched canary evidence and returns `eligible_for_manual_promotion`, `continue_canary`, or `rollback_candidate`.
+6. Only `eligible_for_manual_promotion` makes the change eligible for a separate human-reviewed router edit.
 
 ## Command
 
@@ -43,15 +44,19 @@ A canary always requires fresh matched task IDs even when historical evidence is
 
 The canary compares current and candidate on the same workload. Unmatched tasks must not be used to claim a promotion.
 
+For evaluation, store fresh canary attempts separately from historical feedback. The v0.18 evaluator deliberately consumes a dedicated canary-feedback file so historical records cannot be mistaken for fresh validation.
+
 ## Acceptance contract
 
-After canary feedback is appended, the category leaderboard must still return `promote` with the same candidate as winner. The candidate must still satisfy the existing conservative Advisor promotion rule: either the quality margin clears the quality threshold, or both sides have paired efficiency evidence and the total empirical margin clears the efficiency-promotion threshold without a material quality regression.
+After canary feedback is recorded, the fresh-only category leaderboard must return `promote` with the same candidate as winner. The candidate must still satisfy the existing conservative Advisor promotion rule: either the quality margin clears the quality threshold, or both sides have paired efficiency evidence and the total empirical margin clears the efficiency-promotion threshold without a material quality regression.
 
 Any deterministic judge or required validation gate must also pass.
 
 ## Stop / rollback contract
 
-The plan instructs the operator to stop if a deterministic validation fails, if the candidate failure rate materially regresses against the current route after enough matched pairs, if the leaderboard no longer returns `promote`, or if the empirical winner changes.
+The plan instructs the operator to stop if a deterministic validation fails, if the candidate failure rate materially regresses against the current route after enough matched pairs, if the fresh canary leaderboard no longer returns `promote`, or if the empirical winner changes.
+
+The v0.18 evaluator can return `rollback_candidate`, but it does not execute rollback automatically.
 
 ## Safety boundary
 
