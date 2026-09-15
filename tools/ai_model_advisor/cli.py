@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .activity import ActivityAnalyzer
+from .empirical_leaderboard import build_empirical_leaderboard, empirical_leaderboard_markdown
 from .experiment_evaluate import evaluate_experiment_plan, experiment_evaluation_markdown
 from .experiment_impact import build_experiment_impact, experiment_impact_markdown
 from .experiment_plan import build_experiment_plan, experiment_plan_markdown
@@ -24,6 +25,7 @@ from .readiness import build_experiment_readiness, experiment_readiness_markdown
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
 from .report import recommendation_markdown
+from .routing_proposals import build_routing_proposals, routing_proposals_markdown
 from .sources import (
     baseline_from_report,
     load_baseline,
@@ -244,6 +246,35 @@ def command_feedback_readiness(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_feedback_leaderboard(args: argparse.Namespace) -> int:
+    report = build_empirical_leaderboard(FeedbackStore.load(args.feedback))
+    markdown = empirical_leaderboard_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
+def command_routing_proposals(args: argparse.Namespace) -> int:
+    payload = json.loads(Path(args.routing_matrix).read_text(encoding="utf-8"))
+    rows = payload.get("routing_matrix", payload) if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise ValueError("routing matrix JSON must be a list or contain a routing_matrix list")
+    leaderboard = build_empirical_leaderboard(FeedbackStore.load(args.feedback))
+    report = build_routing_proposals(rows, leaderboard)
+    markdown = routing_proposals_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
 def command_feedback_import_hive(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
     report = import_hive_trace(
@@ -441,6 +472,19 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_readiness.add_argument("--output", help="Optional Markdown experiment-readiness plan")
     feedback_readiness.add_argument("--json-output")
     feedback_readiness.set_defaults(func=command_feedback_readiness)
+
+    feedback_leaderboard = sub.add_parser("feedback-leaderboard")
+    feedback_leaderboard.add_argument("--feedback", required=True)
+    feedback_leaderboard.add_argument("--output", help="Optional Markdown empirical leaderboard")
+    feedback_leaderboard.add_argument("--json-output")
+    feedback_leaderboard.set_defaults(func=command_feedback_leaderboard)
+
+    routing_proposals = sub.add_parser("routing-proposals")
+    routing_proposals.add_argument("--routing-matrix", required=True)
+    routing_proposals.add_argument("--feedback", required=True)
+    routing_proposals.add_argument("--output", help="Optional Markdown routing proposal report")
+    routing_proposals.add_argument("--json-output")
+    routing_proposals.set_defaults(func=command_routing_proposals)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
