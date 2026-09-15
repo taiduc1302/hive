@@ -21,6 +21,7 @@ from .hive_trace import (
     import_report_markdown,
 )
 from .matrix import build_routing_matrix, routing_matrix_markdown
+from .promotion_plan import build_promotion_plans, promotion_plans_markdown
 from .readiness import build_experiment_readiness, experiment_readiness_markdown
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
@@ -258,14 +259,34 @@ def command_feedback_leaderboard(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_routing_proposals(args: argparse.Namespace) -> int:
-    payload = json.loads(Path(args.routing_matrix).read_text(encoding="utf-8"))
+def _routing_matrix_rows(path: str | Path) -> list[dict[str, object]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
     rows = payload.get("routing_matrix", payload) if isinstance(payload, dict) else payload
     if not isinstance(rows, list):
         raise ValueError("routing matrix JSON must be a list or contain a routing_matrix list")
+    return rows
+
+
+def command_routing_proposals(args: argparse.Namespace) -> int:
+    rows = _routing_matrix_rows(args.routing_matrix)
     leaderboard = build_empirical_leaderboard(FeedbackStore.load(args.feedback))
     report = build_routing_proposals(rows, leaderboard)
     markdown = routing_proposals_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    return 0
+
+
+def command_promotion_plan(args: argparse.Namespace) -> int:
+    rows = _routing_matrix_rows(args.routing_matrix)
+    leaderboard = build_empirical_leaderboard(FeedbackStore.load(args.feedback))
+    proposals = build_routing_proposals(rows, leaderboard)
+    report = build_promotion_plans(proposals, leaderboard)
+    markdown = promotion_plans_markdown(report)
     if args.output:
         _write(args.output, markdown)
     else:
@@ -485,6 +506,13 @@ def build_parser() -> argparse.ArgumentParser:
     routing_proposals.add_argument("--output", help="Optional Markdown routing proposal report")
     routing_proposals.add_argument("--json-output")
     routing_proposals.set_defaults(func=command_routing_proposals)
+
+    promotion_plan = sub.add_parser("promotion-plan")
+    promotion_plan.add_argument("--routing-matrix", required=True)
+    promotion_plan.add_argument("--feedback", required=True)
+    promotion_plan.add_argument("--output", help="Optional Markdown promotion/canary plan")
+    promotion_plan.add_argument("--json-output")
+    promotion_plan.set_defaults(func=command_promotion_plan)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
