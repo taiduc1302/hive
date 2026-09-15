@@ -201,7 +201,10 @@ def routing_proposals_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "`safe_to_apply` is always `false` in this report. A proposed change requires a separate, explicit router-policy edit and validation run.",
+            (
+                "`safe_to_apply` is always `false` in this report. A proposed change "
+                "requires a separate, explicit router-policy edit and validation run."
+            ),
             "",
         ]
     )
