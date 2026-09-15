@@ -1,6 +1,7 @@
 """AI Model Advisor: current-model tracking and workload-aware routing."""
 
 from .activity import ActivityAnalyzer
+from .canary_evaluate import evaluate_promotion_canary
 from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
 from .promotion_plan import build_promotion_plans
@@ -20,6 +21,7 @@ __all__ = [
     "build_promotion_plans",
     "build_routing_proposals",
     "build_target_experiment_plan",
+    "evaluate_promotion_canary",
     "recommend_for_target",
 ]
-__version__ = "0.17.0"
+__version__ = "0.18.0"
