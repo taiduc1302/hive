@@ -1,0 +1,10 @@
+{
+  "providers": ["openai", "anthropic"],
+  "include_limited": false,
+  "cost_sensitivity": 3,
+  "latency_sensitivity": 3,
+  "privacy": {
+    "chatgpt_history": "explicit_export_only",
+    "github": "public_events_by_default"
+  }
+}

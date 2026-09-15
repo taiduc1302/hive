@@ -1,0 +1,92 @@
+name: AI Model Advisor Canary Evaluation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/ai_model_advisor/canary_evaluate.py"
+      - "tools/ai_model_advisor/__init__.py"
+      - "tests/test_ai_model_advisor_canary_evaluate.py"
+      - "docs/AI_MODEL_ADVISOR_CANARY_EVALUATION.md"
+      - ".github/workflows/ai-model-advisor-canary.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  canary-evaluation-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install validation dependencies
+        run: python -m pip install pytest ruff
+
+      - name: Lint v0.18 files
+        run: |
+          ruff check \
+            tools/ai_model_advisor/canary_evaluate.py \
+            tools/ai_model_advisor/__init__.py \
+            tests/test_ai_model_advisor_canary_evaluate.py
+
+      - name: Run canary evaluator tests
+        run: python -m pytest tests/test_ai_model_advisor_canary_evaluate.py
+
+      - name: Build synthetic fresh canary inputs
+        run: |
+          mkdir -p model-advisor-output
+          cat > model-advisor-output/promotion-plan.json <<'JSON'
+          {
+            "plans": [
+              {
+                "category": "debugging",
+                "state": "ready_for_canary",
+                "current": {"model_id": "model-b", "effort": "high", "execution_mode": "single"},
+                "candidate": {"model_id": "model-a", "effort": "high", "execution_mode": "single"},
+                "recommended_paired_trials": 3
+              }
+            ]
+          }
+          JSON
+          cat > model-advisor-output/canary-feedback.jsonl <<'JSONL'
+          {"provider":"test","model_id":"model-a","effort":"high","execution_mode":"single","outcome":"success","task_category":"debugging","task_id":"canary-1"}
+          {"provider":"test","model_id":"model-b","effort":"high","execution_mode":"single","outcome":"partial","task_category":"debugging","task_id":"canary-1"}
+          {"provider":"test","model_id":"model-a","effort":"high","execution_mode":"single","outcome":"success","task_category":"debugging","task_id":"canary-2"}
+          {"provider":"test","model_id":"model-b","effort":"high","execution_mode":"single","outcome":"partial","task_category":"debugging","task_id":"canary-2"}
+          {"provider":"test","model_id":"model-a","effort":"high","execution_mode":"single","outcome":"success","task_category":"debugging","task_id":"canary-3"}
+          {"provider":"test","model_id":"model-b","effort":"high","execution_mode":"single","outcome":"partial","task_category":"debugging","task_id":"canary-3"}
+          JSONL
+
+      - name: Smoke-test canary evaluator CLI
+        run: |
+          python -m tools.ai_model_advisor.canary_evaluate \
+            --promotion-plan model-advisor-output/promotion-plan.json \
+            --canary-feedback model-advisor-output/canary-feedback.jsonl \
+            --output model-advisor-output/canary-evaluation.md \
+            --json-output model-advisor-output/canary-evaluation.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("model-advisor-output/canary-evaluation.json").read_text())
+          evaluation = report["evaluations"][0]
+          assert evaluation["state"] == "eligible_for_manual_promotion"
+          assert evaluation["matched_pairs"] == 3
+          assert evaluation["safe_to_apply"] is False
+          assert report["automatic_policy_mutation"] is False
+          assert report["automatic_rollback"] is False
+          PY
+
+      - name: Publish canary summary
+        run: cat model-advisor-output/canary-evaluation.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload canary evaluator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-model-advisor-canary-${{ github.run_id }}
+          path: model-advisor-output/
+          retention-days: 30
