@@ -105,12 +105,10 @@ jobs:
             --output model-advisor-output/routing-matrix.md \
             --json-output model-advisor-output/routing-matrix.json
 
-      - name: Generate controlled experiment plan
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate deterministic controlled experiment smoke plan
         run: |
           python -m tools.ai_model_advisor.cli experiment-plan \
-            --github-user "${GITHUB_REPOSITORY_OWNER}" \
+            --input tools/ai_model_advisor/sample_activity.json \
             --feedback model-advisor-output/empty-feedback.jsonl \
             --output model-advisor-output/experiment-plan.md \
             --json-output model-advisor-output/experiment-plan.json
