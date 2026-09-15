@@ -1,3 +1,4 @@
+from tools.ai_model_advisor.cli import build_parser
 from tools.ai_model_advisor.empirical_leaderboard import build_empirical_leaderboard
 from tools.ai_model_advisor.feedback import FeedbackStore, UsageRecord
 from tools.ai_model_advisor.promotion_plan import build_promotion_plans, promotion_plans_markdown
@@ -74,3 +75,14 @@ def test_markdown_contains_acceptance_and_rollback_contract():
     assert "Acceptance criteria" in markdown
     assert "Rollback / stop criteria" in markdown
     assert "safe_to_apply" in markdown
+
+
+def test_central_cli_exposes_promotion_plan_command():
+    args = build_parser().parse_args([
+        "promotion-plan",
+        "--routing-matrix",
+        "matrix.json",
+        "--feedback",
+        "feedback.jsonl",
+    ])
+    assert args.func.__name__ == "command_promotion_plan"
