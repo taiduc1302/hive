@@ -6,19 +6,21 @@ The intended flow is:
 
 1. `feedback-leaderboard` determines whether controlled evidence supports `promote`, `hold`, `collect_more`, or `insufficient_evidence`.
 2. `routing-proposals` compares that empirical result with the current router primary.
-3. `promotion_plan` converts only `propose_change` cases into a fresh matched-canary plan.
+3. `promotion-plan` converts only `propose_change` cases into a fresh matched-canary plan.
 4. An operator runs the required controlled trials separately.
 5. The feedback is re-evaluated. Only if the same candidate still satisfies the promotion rules does the change become eligible for a separate human-reviewed router edit.
 
 ## Command
 
 ```bash
-python -m tools.ai_model_advisor.promotion_plan_cli \
+python -m tools.ai_model_advisor.cli promotion-plan \
   --routing-matrix model-advisor-output/routing-matrix.json \
   --feedback feedback.jsonl \
   --output model-advisor-output/promotion-plan.md \
   --json-output model-advisor-output/promotion-plan.json
 ```
+
+A standalone module entry point is also available as `python -m tools.ai_model_advisor.promotion_plan_cli`.
 
 ## What a plan contains
 
