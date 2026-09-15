@@ -14,6 +14,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_HIVE_ADAPTER.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
+      - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
       - ".github/workflows/ai-model-advisor.yml"
   schedule:
@@ -227,12 +228,28 @@ jobs:
             --output model-advisor-output/feedback-readiness-smoke.md \
             --json-output model-advisor-output/feedback-readiness-smoke.json
 
+      - name: Smoke-test empirical routing review commands
+        run: |
+          python -m tools.ai_model_advisor.cli feedback-leaderboard \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/empirical-leaderboard-smoke.md \
+            --json-output model-advisor-output/empirical-leaderboard-smoke.json
+          python -m tools.ai_model_advisor.cli routing-proposals \
+            --routing-matrix model-advisor-output/routing-matrix.json \
+            --feedback model-advisor-output/empty-feedback.jsonl \
+            --output model-advisor-output/routing-proposals-smoke.md \
+            --json-output model-advisor-output/routing-proposals-smoke.json
+
       - name: Publish advisor summary
         shell: bash
         run: |
           cat model-advisor-output/recommendation.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/routing-matrix.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/empirical-leaderboard-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/routing-proposals-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
