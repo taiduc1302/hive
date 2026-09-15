@@ -3,6 +3,7 @@
 from .activity import ActivityAnalyzer
 from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
+from .promotion_plan import build_promotion_plans
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
 from .routing_proposals import build_routing_proposals
@@ -16,8 +17,9 @@ __all__ = [
     "RecommendationEngine",
     "UsageRecord",
     "build_empirical_leaderboard",
+    "build_promotion_plans",
     "build_routing_proposals",
     "build_target_experiment_plan",
     "recommend_for_target",
 ]
-__version__ = "0.16.0"
+__version__ = "0.17.0"
