@@ -32,13 +32,7 @@ class RecommendationEngine:
 
     @staticmethod
     def _difficulty(workload: WorkloadProfile) -> float:
-        return (
-            workload.reasoning * 0.30
-            + workload.ambiguity * 0.22
-            + workload.agentic * 0.20
-            + workload.breadth * 0.18
-            + workload.coding * 0.10
-        )
+        return workload.reasoning * 0.30 + workload.ambiguity * 0.22 + workload.agentic * 0.20 + workload.breadth * 0.18 + workload.coding * 0.10
 
     @classmethod
     def _effort(cls, model: ModelProfile, workload: WorkloadProfile) -> str:
@@ -90,14 +84,10 @@ class RecommendationEngine:
             + c.get("long_horizon", 3) * workload.breadth * 0.80
             + c.get("ambiguity", 3) * workload.ambiguity * 0.75
         )
-        efficiency = (
-            c.get("speed", 3) * workload.latency_sensitivity * 0.55
-            + c.get("cost_efficiency", 3) * workload.cost_sensitivity * 0.70
-        )
+        efficiency = c.get("speed", 3) * workload.latency_sensitivity * 0.55 + c.get("cost_efficiency", 3) * workload.cost_sensitivity * 0.70
         overkill = max(
             0.0,
-            (sum(c.get(key, 3) for key in ("reasoning", "coding", "agentic")) / 3)
-            - (need_total / 4),
+            (sum(c.get(key, 3) for key in ("reasoning", "coding", "agentic")) / 3) - (need_total / 4),
         )
         overkill_penalty = overkill * (workload.cost_sensitivity + workload.latency_sensitivity) * 0.75
         limited_penalty = 18.0 if model.status == "limited" else 0.0
@@ -126,9 +116,7 @@ class RecommendationEngine:
         effort_penalty = 0.0
         if effort_distance:
             if effort_rank > preferred_effort_rank:
-                pressure = 0.75 + 0.10 * (
-                    workload.cost_sensitivity + workload.latency_sensitivity
-                )
+                pressure = 0.75 + 0.10 * (workload.cost_sensitivity + workload.latency_sensitivity)
             else:
                 pressure = 0.85 + 0.10 * cls._difficulty(workload)
             effort_penalty = effort_distance * 0.90 * pressure
@@ -141,9 +129,7 @@ class RecommendationEngine:
             if mode_distance == 0:
                 mode_penalty = 0.75
             elif mode_depth > preferred_mode_depth:
-                pressure = 0.85 + 0.10 * (
-                    workload.cost_sensitivity + workload.latency_sensitivity
-                )
+                pressure = 0.85 + 0.10 * (workload.cost_sensitivity + workload.latency_sensitivity)
                 mode_penalty = mode_distance * 1.20 * pressure
             else:
                 pressure = 0.85 + 0.10 * (workload.agentic + workload.breadth)
@@ -193,32 +179,18 @@ class RecommendationEngine:
         )
         category_label = f" for {task_category}" if task_category else ""
         if quality_adjustment >= 1.0:
-            reasons.append(
-                f"Personal outcome history{category_label} improves this configuration's score "
-                f"({quality_samples} observations)"
-            )
+            reasons.append(f"Personal outcome history{category_label} improves this configuration's score ({quality_samples} observations)")
         elif quality_adjustment <= -1.0:
-            tradeoffs.append(
-                f"Personal outcome history{category_label} reduces confidence in this configuration "
-                f"({quality_samples} observations)"
-            )
+            tradeoffs.append(f"Personal outcome history{category_label} reduces confidence in this configuration ({quality_samples} observations)")
 
         if efficiency_adjustment >= 0.5:
-            reasons.append(
-                f"Paired same-task cost/latency history favors this configuration "
-                f"({efficiency_samples} comparable tasks)"
-            )
+            reasons.append(f"Paired same-task cost/latency history favors this configuration ({efficiency_samples} comparable tasks)")
         elif efficiency_adjustment <= -0.5:
-            tradeoffs.append(
-                "Paired same-task cost/latency history is unfavorable "
-                f"({efficiency_samples} comparable tasks)"
-            )
+            tradeoffs.append(f"Paired same-task cost/latency history is unfavorable ({efficiency_samples} comparable tasks)")
 
         if effort != preferred_effort or mode != preferred_mode:
             if quality_adjustment + efficiency_adjustment > abs(configuration_adjustment):
-                reasons.append(
-                    "Repeated empirical evidence is strong enough to override the static effort/mode prior"
-                )
+                reasons.append("Repeated empirical evidence is strong enough to override the static effort/mode prior")
             tradeoffs.append(
                 f"Static workload prior prefers {preferred_effort}/{preferred_mode}; "
                 f"this configuration carries {configuration_adjustment:+.3f} prior adjustment"
@@ -359,7 +331,4 @@ class RecommendationEngine:
         spread = max(1.0, abs(best - second))
         activity_factor = min(1.0, 0.35 + workload.activity_count / 25.0)
         confidence = min(0.96, 0.58 + min(0.25, spread / 40.0) + 0.13 * activity_factor)
-        return [
-            replace(item, confidence=round(max(0.45, confidence - index * 0.08), 2))
-            for index, item in enumerate(scored[:top_n])
-        ]
+        return [replace(item, confidence=round(max(0.45, confidence - index * 0.08), 2)) for index, item in enumerate(scored[:top_n])]

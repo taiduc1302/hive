@@ -69,14 +69,9 @@ def evaluate_provider_experiment_preflight(
 
         model = models.get((provider, model_id))
         if model is None:
-            side_blockers.append(
-                f"registry does not contain provider/model {provider or 'missing'}/{model_id or 'missing'}"
-            )
+            side_blockers.append(f"registry does not contain provider/model {provider or 'missing'}/{model_id or 'missing'}")
         elif effort and effort not in model.efforts:
-            side_blockers.append(
-                f"effort={effort} is not declared for registry model {model_id}; "
-                f"allowed: {', '.join(model.efforts)}"
-            )
+            side_blockers.append(f"effort={effort} is not declared for registry model {model_id}; allowed: {', '.join(model.efforts)}")
 
         credential_name = profile.credential_env_by_provider.get(provider)
         if credential_name and not env.get(credential_name):
@@ -144,9 +139,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Preflight one saved experiment against the built-in direct provider adapter."
-    )
+    parser = argparse.ArgumentParser(description="Preflight one saved experiment against the built-in direct provider adapter.")
     parser.add_argument("--plan", required=True, help="JSON produced by experiment-plan")
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")

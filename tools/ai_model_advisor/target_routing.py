@@ -33,11 +33,7 @@ def _allowed_modes(
     model: ModelProfile,
     profile: ExecutionTargetProfile,
 ) -> tuple[str, ...]:
-    return tuple(
-        mode
-        for mode in model.execution_modes
-        if _configuration_allowed(model, model.default_effort or "default", mode, profile)
-    )
+    return tuple(mode for mode in model.execution_modes if _configuration_allowed(model, model.default_effort or "default", mode, profile))
 
 
 def _best_target_configuration(
@@ -136,7 +132,4 @@ def recommend_for_target(
     spread = max(1.0, abs(best - second))
     activity_factor = min(1.0, 0.35 + workload.activity_count / 25.0)
     confidence = min(0.96, 0.58 + min(0.25, spread / 40.0) + 0.13 * activity_factor)
-    return [
-        replace(item, confidence=round(max(0.45, confidence - index * 0.08), 2))
-        for index, item in enumerate(scored[:top_n])
-    ]
+    return [replace(item, confidence=round(max(0.45, confidence - index * 0.08), 2)) for index, item in enumerate(scored[:top_n])]

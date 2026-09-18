@@ -96,24 +96,16 @@ def _evaluate_ready_plan(plan: dict[str, Any], store: FeedbackStore) -> dict[str
 
     if matched_pairs >= 3 and failure_regression > MAX_FAILURE_RATE_REGRESSION:
         state = "rollback_candidate"
-        reason = (
-            "Candidate failure rate materially regressed against the current route on matched canary tasks."
-        )
+        reason = "Candidate failure rate materially regressed against the current route on matched canary tasks."
     elif matched_pairs < required_pairs:
         state = "continue_canary"
-        reason = (
-            f"Only {matched_pairs} matched canary pairs are available; {required_pairs} are required by the plan."
-        )
+        reason = f"Only {matched_pairs} matched canary pairs are available; {required_pairs} are required by the plan."
     elif not decision or decision.get("status") != "promote" or not winner_matches_candidate:
         state = "continue_canary"
-        reason = (
-            "The fresh matched canary evidence does not yet re-confirm the proposed candidate as an empirical promotion."
-        )
+        reason = "The fresh matched canary evidence does not yet re-confirm the proposed candidate as an empirical promotion."
     else:
         state = "eligible_for_manual_promotion"
-        reason = (
-            "The required fresh matched trials are complete and independently re-confirm the same candidate as promoted."
-        )
+        reason = "The required fresh matched trials are complete and independently re-confirm the same candidate as promoted."
 
     return {
         "category": category,
@@ -162,10 +154,7 @@ def evaluate_promotion_canary(
     return {
         "records": len(canary_feedback.records),
         "evaluations": evaluations,
-        "state_counts": {
-            state: sum(item["state"] == state for item in evaluations)
-            for state in states
-        },
+        "state_counts": {state: sum(item["state"] == state for item in evaluations) for state in states},
         "automatic_policy_mutation": False,
         "automatic_rollback": False,
     }

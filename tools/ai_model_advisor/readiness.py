@@ -18,20 +18,11 @@ def _is_controlled_config(effort: str, execution_mode: str) -> bool:
 
 def _next_action(row: dict[str, Any]) -> str:
     if not row["controlled_config"]:
-        return (
-            "Run controlled attempts with an explicit effort and execution mode; "
-            "historical Hive observations are model-level evidence only."
-        )
+        return "Run controlled attempts with an explicit effort and execution mode; historical Hive observations are model-level evidence only."
     if row["exact_quality_remaining"] > 0:
-        return (
-            f"Collect {row['exact_quality_remaining']} more outcome run(s) for this exact "
-            "model + effort + execution configuration."
-        )
+        return f"Collect {row['exact_quality_remaining']} more outcome run(s) for this exact model + effort + execution configuration."
     if row["paired_efficiency_remaining"] > 0:
-        return (
-            f"Collect {row['paired_efficiency_remaining']} more successful paired task ID(s) "
-            "against at least one different configuration."
-        )
+        return f"Collect {row['paired_efficiency_remaining']} more successful paired task ID(s) against at least one different configuration."
     return "Evidence-ready; keep the configuration as a benchmark anchor and refresh periodically."
 
 
@@ -81,11 +72,7 @@ def build_experiment_readiness(store: FeedbackStore) -> dict[str, Any]:
             "quality_adjustment": source["quality_adjustment"],
             "efficiency_adjustment": source["efficiency_adjustment"],
         }
-        row["evidence_ready"] = bool(
-            controlled
-            and source["exact_quality_eligible"]
-            and source["paired_efficiency_eligible"]
-        )
+        row["evidence_ready"] = bool(controlled and source["exact_quality_eligible"] and source["paired_efficiency_eligible"])
         row["next_action"] = _next_action(row)
         rows.append(row)
 

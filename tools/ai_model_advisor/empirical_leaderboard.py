@@ -58,10 +58,7 @@ def _decision(eligible: list[dict[str, Any]]) -> dict[str, Any]:
             "runner_up": None,
             "score_margin": None,
             "quality_margin": None,
-            "reason": (
-                "At least two controlled configurations with exact quality evidence "
-                "are required before changing routing."
-            ),
+            "reason": ("At least two controlled configurations with exact quality evidence are required before changing routing."),
         }
 
     ranked = sorted(
@@ -87,10 +84,7 @@ def _decision(eligible: list[dict[str, Any]]) -> dict[str, Any]:
 
     if quality_margin >= QUALITY_PROMOTION_MARGIN:
         status = "promote"
-        reason = (
-            "Winner has enough exact outcome evidence and clears the conservative "
-            "quality margin over the runner-up."
-        )
+        reason = "Winner has enough exact outcome evidence and clears the conservative quality margin over the runner-up."
     elif (
         score_margin >= PROMOTION_SCORE_MARGIN
         and winner["efficiency_ready"]
@@ -98,22 +92,15 @@ def _decision(eligible: list[dict[str, Any]]) -> dict[str, Any]:
         and quality_margin >= -MAX_QUALITY_REGRESSION_FOR_EFFICIENCY_PROMOTION
     ):
         status = "promote"
-        reason = (
-            "Winner clears the total empirical margin with paired efficiency evidence "
-            "on both sides and no material quality regression."
-        )
+        reason = "Winner clears the total empirical margin with paired efficiency evidence on both sides and no material quality regression."
     elif score_margin >= PROMOTION_SCORE_MARGIN:
         status = "collect_more"
         reason = (
-            "A meaningful score gap exists, but the evidence is not balanced enough "
-            "to promote safely. Collect more paired or exact observations."
+            "A meaningful score gap exists, but the evidence is not balanced enough to promote safely. Collect more paired or exact observations."
         )
     else:
         status = "hold"
-        reason = (
-            "Evidence is sufficient to compare the leading configurations, but the "
-            "observed gap is too small to justify changing routing."
-        )
+        reason = "Evidence is sufficient to compare the leading configurations, but the observed gap is too small to justify changing routing."
 
     return {
         "status": status,
@@ -175,16 +162,11 @@ def build_empirical_leaderboard(store: FeedbackStore) -> dict[str, Any]:
             "paired_efficiency_tasks": PAIRED_EFFICIENCY_MIN,
             "promotion_score_margin": PROMOTION_SCORE_MARGIN,
             "quality_promotion_margin": QUALITY_PROMOTION_MARGIN,
-            "max_quality_regression_for_efficiency_promotion": (
-                MAX_QUALITY_REGRESSION_FOR_EFFICIENCY_PROMOTION
-            ),
+            "max_quality_regression_for_efficiency_promotion": (MAX_QUALITY_REGRESSION_FOR_EFFICIENCY_PROMOTION),
         },
         "excluded_uncontrolled_configurations": excluded_uncontrolled,
         "categories": categories,
-        "decision_counts": {
-            status: decisions.count(status)
-            for status in ("promote", "hold", "collect_more", "insufficient_evidence")
-        },
+        "decision_counts": {status: decisions.count(status) for status in ("promote", "hold", "collect_more", "insufficient_evidence")},
     }
 
 
@@ -193,10 +175,7 @@ def empirical_leaderboard_markdown(report: dict[str, Any]) -> str:
         "# AI Model Advisor Empirical Leaderboard",
         "",
         f"Feedback records: **{report['records']}**",
-        (
-            "Uncontrolled historical configurations excluded from decisions: "
-            f"**{report['excluded_uncontrolled_configurations']}**"
-        ),
+        (f"Uncontrolled historical configurations excluded from decisions: **{report['excluded_uncontrolled_configurations']}**"),
         "",
         "This report is decision support only. It never rewrites routing rules automatically.",
         "",
@@ -226,9 +205,7 @@ def empirical_leaderboard_markdown(report: dict[str, Any]) -> str:
             ]
         )
         for index, row in enumerate(category["configurations"], start=1):
-            configuration = (
-                f"`{row['model_id']} / {row['effort']} / {row['execution_mode']}`"
-            )
+            configuration = f"`{row['model_id']} / {row['effort']} / {row['execution_mode']}`"
             lines.append(
                 f"| {index} | {configuration} | {row['observations']} | "
                 f"{row['outcome_score']:.3f} | {row['average_retries']:.3f} | "
@@ -239,10 +216,7 @@ def empirical_leaderboard_markdown(report: dict[str, Any]) -> str:
             lines.extend(
                 [
                     "",
-                    (
-                        f"Top-vs-runner score margin: **{decision['score_margin']:+.3f}**; "
-                        f"quality margin: **{decision['quality_margin']:+.3f}**."
-                    ),
+                    (f"Top-vs-runner score margin: **{decision['score_margin']:+.3f}**; quality margin: **{decision['quality_margin']:+.3f}**."),
                 ]
             )
         lines.append("")
@@ -255,10 +229,7 @@ def empirical_leaderboard_markdown(report: dict[str, Any]) -> str:
                 f"- At least {EXACT_FEEDBACK_MIN} exact controlled observations are required "
                 "per configuration before it can influence a leaderboard decision."
             ),
-            (
-                f"- Cost/latency can break a close race only after both leaders have at least "
-                f"{PAIRED_EFFICIENCY_MIN} comparable successful task IDs."
-            ),
+            (f"- Cost/latency can break a close race only after both leaders have at least {PAIRED_EFFICIENCY_MIN} comparable successful task IDs."),
             "- Historical `observed / hive_agent_loop` telemetry is shown elsewhere but cannot win this leaderboard.",
             "- A `promote` result is a recommendation for router review, not an automatic policy mutation.",
             "",
@@ -276,9 +247,7 @@ def _write(path: str | None, content: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Build a conservative empirical model leaderboard from Advisor feedback."
-    )
+    parser = argparse.ArgumentParser(description="Build a conservative empirical model leaderboard from Advisor feedback.")
     parser.add_argument("--feedback", required=True, help="Feedback JSONL path")
     parser.add_argument("--output", help="Markdown output path")
     parser.add_argument("--json-output", help="JSON output path")
