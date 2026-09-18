@@ -1,0 +1,40 @@
+name: Format Advisor Python
+
+on:
+  push:
+    branches:
+      - fix/advisor-ruff-format
+    paths:
+      - ".github/workflows/format-advisor-python.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/advisor-ruff-format
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install locked formatter
+        run: python -m pip install ruff==0.15.0
+      - name: Format Advisor Python
+        run: ruff format tools/ai_model_advisor
+      - name: Commit formatting
+        shell: bash
+        run: |
+          if git diff --quiet -- tools/ai_model_advisor; then
+            echo "No formatting changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/ai_model_advisor
+          git commit -m "style: format AI model advisor"
+          git push origin HEAD:fix/advisor-ruff-format
