@@ -87,3 +87,42 @@ def test_unmatched_tasks_do_not_count_as_canary_pairs():
     item = evaluate_promotion_canary(_plan(), FeedbackStore(records))["evaluations"][0]
     assert item["state"] == "continue_canary"
     assert item["matched_pairs"] == 0
+
+
+def test_duplicate_attempts_are_excluded_from_canary_pairs():
+    records = []
+    for i in range(3):
+        task_id = f"canary-{i}"
+        records.append(_record("model-a", "success", task_id))
+        records.append(_record("model-b", "partial", task_id))
+
+    # A retry/re-run for the same exact candidate configuration makes this
+    # task ambiguous. The evaluator must not silently let the last record win.
+    records.append(_record("model-a", "failure", "canary-2"))
+
+    report = evaluate_promotion_canary(_plan(), FeedbackStore(records))
+    item = report["evaluations"][0]
+
+    assert item["state"] == "continue_canary"
+    assert item["matched_pairs"] == 2
+    assert item["ambiguous_pairs_excluded"] == 1
+    assert item["ambiguous_task_ids"] == ["canary-2"]
+    assert report["ambiguous_pairs_excluded"] == 1
+
+
+def test_one_sided_canary_attempts_are_reported_as_incomplete():
+    records = [
+        _record("model-a", "success", "paired"),
+        _record("model-b", "partial", "paired"),
+        _record("model-a", "success", "candidate-only"),
+    ]
+
+    item = evaluate_promotion_canary(
+        _plan(required_pairs=2),
+        FeedbackStore(records),
+    )["evaluations"][0]
+
+    assert item["state"] == "continue_canary"
+    assert item["matched_pairs"] == 1
+    assert item["incomplete_pairs_excluded"] == 1
+    assert item["incomplete_task_ids"] == ["candidate-only"]
