@@ -1,6 +1,6 @@
 # AI Model Advisor Canary Evaluation
 
-AI Model Advisor v0.18 adds a review-only evaluator for promotion canaries.
+AI Model Advisor v0.18 added the review-only promotion-canary evaluator. v0.19 hardens its evidence matching so duplicate attempts cannot silently become promotion evidence.
 
 The evaluator consumes two explicit inputs:
 
