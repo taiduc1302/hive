@@ -11,9 +11,7 @@ from .routing_proposals import build_routing_proposals
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Build review-only promotion/canary plans from empirical routing evidence."
-    )
+    parser = argparse.ArgumentParser(description="Build review-only promotion/canary plans from empirical routing evidence.")
     parser.add_argument("--routing-matrix", required=True)
     parser.add_argument("--feedback", required=True)
     parser.add_argument("--output", help="Optional Markdown promotion plan")

@@ -46,12 +46,9 @@ def _proposal_confidence(decision: dict[str, Any]) -> dict[str, Any]:
         int(winner.get("observations", 0)),
         int(runner.get("observations", 0)),
     )
-    balanced_efficiency = bool(
-        winner.get("efficiency_ready") and runner.get("efficiency_ready")
-    )
+    balanced_efficiency = bool(winner.get("efficiency_ready") and runner.get("efficiency_ready"))
     strong_margin = bool(
-        (quality_margin is not None and quality_margin >= 2.0)
-        or (score_margin is not None and score_margin >= 2.0 and balanced_efficiency)
+        (quality_margin is not None and quality_margin >= 2.0) or (score_margin is not None and score_margin >= 2.0 and balanced_efficiency)
     )
     if strong_margin and evidence_floor >= 6:
         return {"level": "high", "score": 0.9}
@@ -67,9 +64,7 @@ def build_routing_proposals(
     This function never mutates router policy. Even a `propose_change` result
     requires an explicit human review and a separate policy edit.
     """
-    empirical_by_category = {
-        item["category"]: item for item in leaderboard.get("categories", [])
-    }
+    empirical_by_category = {item["category"]: item for item in leaderboard.get("categories", [])}
     proposals: list[dict[str, Any]] = []
 
     for row in routing_matrix:
@@ -105,10 +100,7 @@ def build_routing_proposals(
                 requires_review = False
             else:
                 action = "propose_change"
-                reason = (
-                    "The empirical leaderboard promotes a different controlled configuration. "
-                    "Review the evidence before editing router policy."
-                )
+                reason = "The empirical leaderboard promotes a different controlled configuration. Review the evidence before editing router policy."
                 requires_review = True
             confidence = _proposal_confidence(decision)
         elif status == "hold":
@@ -118,16 +110,12 @@ def build_routing_proposals(
             requires_review = False
         elif status == "collect_more":
             action = "collect_more"
-            reason = (
-                "A meaningful empirical gap exists, but balanced evidence is still insufficient for a safe promotion."
-            )
+            reason = "A meaningful empirical gap exists, but balanced evidence is still insufficient for a safe promotion."
             confidence = {"level": "low", "score": 0.4}
             requires_review = False
         else:
             action = "insufficient_evidence"
-            reason = (
-                "At least two exact controlled configurations are required before proposing a routing change."
-            )
+            reason = "At least two exact controlled configurations are required before proposing a routing change."
             confidence = {"level": "low", "score": 0.25}
             requires_review = False
 
@@ -178,9 +166,7 @@ def routing_proposals_markdown(report: dict[str, Any]) -> str:
         current_label = f"`{current['model_id']} / {current['effort']} / {current['execution_mode']}`"
         candidate_label = "—"
         if candidate:
-            candidate_label = (
-                f"`{candidate['model_id']} / {candidate['effort']} / {candidate['execution_mode']}`"
-            )
+            candidate_label = f"`{candidate['model_id']} / {candidate['effort']} / {candidate['execution_mode']}`"
         evidence = proposal["evidence"]
         if evidence:
             detail = f"{evidence['leaderboard_status']}"
@@ -220,9 +206,7 @@ def _write(path: str | None, content: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Build review-only routing proposals from router output and empirical feedback."
-    )
+    parser = argparse.ArgumentParser(description="Build review-only routing proposals from router output and empirical feedback.")
     parser.add_argument("--routing-matrix", required=True, help="JSON output from Advisor matrix command")
     parser.add_argument("--feedback", required=True, help="Feedback JSONL path")
     parser.add_argument("--output", help="Markdown output path")

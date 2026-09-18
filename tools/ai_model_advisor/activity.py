@@ -35,11 +35,7 @@ def _text_from_chatgpt_node(node: dict[str, Any]) -> str:
 
 def _categories_for_text(text: str) -> set[str]:
     lower = text.lower()
-    return {
-        category
-        for category, patterns in CATEGORY_PATTERNS.items()
-        if any(pattern in lower for pattern in patterns)
-    }
+    return {category for category, patterns in CATEGORY_PATTERNS.items() if any(pattern in lower for pattern in patterns)}
 
 
 class ActivityAnalyzer:

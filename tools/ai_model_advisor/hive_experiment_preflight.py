@@ -149,9 +149,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Preflight one saved experiment against the current Hive execution adapter."
-    )
+    parser = argparse.ArgumentParser(description="Preflight one saved experiment against the current Hive execution adapter.")
     parser.add_argument("--plan", required=True, help="JSON produced by experiment-plan")
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")

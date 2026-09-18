@@ -102,9 +102,7 @@ def build_capability_report(
             "benchmark evidence should identify the installed runtime version."
         )
     if not wire_capture:
-        warnings.append(
-            "Hive post-transform request capture is unavailable; explicit model/effort proof is fail-closed."
-        )
+        warnings.append("Hive post-transform request capture is unavailable; explicit model/effort proof is fail-closed.")
 
     return {
         "schema_version": 1,

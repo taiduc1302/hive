@@ -116,10 +116,7 @@ def _pair(
             incomplete.append(task_id)
             continue
         complete.append(task_id)
-        if (
-            primary_records[0].outcome == "success"
-            and challenger_records[0].outcome == "success"
-        ):
+        if primary_records[0].outcome == "success" and challenger_records[0].outcome == "success":
             successful.append(task_id)
 
     quality_remaining = max(0, EXACT_FEEDBACK_MIN - len(complete))
@@ -144,18 +141,11 @@ def _pair(
         }
 
     if kind == "model":
-        rationale = (
-            "Compare the current best configuration with the strongest different model "
-            "on the same tasks."
-        )
+        rationale = "Compare the current best configuration with the strongest different model on the same tasks."
     elif kind == "effort":
-        rationale = (
-            "Hold model and execution mode constant so the comparison isolates reasoning effort."
-        )
+        rationale = "Hold model and execution mode constant so the comparison isolates reasoning effort."
     elif kind == "execution":
-        rationale = (
-            "Hold model and reasoning effort constant so the comparison isolates execution mode."
-        )
+        rationale = "Hold model and reasoning effort constant so the comparison isolates execution mode."
     else:
         raise ValueError(f"Unsupported experiment kind: {kind}")
     return {
@@ -238,12 +228,7 @@ def build_experiment_plan(
                 category,
             )
             effort_challenger = next(
-                (
-                    candidate
-                    for candidate in same_model
-                    if candidate.execution_mode == primary.execution_mode
-                    and candidate.effort != primary.effort
-                ),
+                (candidate for candidate in same_model if candidate.execution_mode == primary.execution_mode and candidate.effort != primary.effort),
                 None,
             )
             if effort_challenger is not None:
@@ -259,12 +244,7 @@ def build_experiment_plan(
                 )
 
             execution_challenger = next(
-                (
-                    candidate
-                    for candidate in same_model
-                    if candidate.effort == primary.effort
-                    and candidate.execution_mode != primary.execution_mode
-                ),
+                (candidate for candidate in same_model if candidate.effort == primary.effort and candidate.execution_mode != primary.execution_mode),
                 None,
             )
             if execution_challenger is not None:
@@ -301,9 +281,7 @@ def build_experiment_plan(
         "categories": categories,
         "experiments": len(all_pairs),
         "planned_experiments": sum(pair["status"] == "planned" for pair in all_pairs),
-        "collecting_experiments": sum(
-            pair["status"] == "collecting" for pair in all_pairs
-        ),
+        "collecting_experiments": sum(pair["status"] == "collecting" for pair in all_pairs),
         "ready_experiments": sum(pair["status"] == "ready" for pair in all_pairs),
     }
 
@@ -362,22 +340,10 @@ def experiment_plan_markdown(plan: dict[str, Any]) -> str:
                     f"- A: `{primary}`",
                     f"- B: `{challenger}`",
                     f"- Complete paired tasks: **{pair['complete_paired_tasks_observed']}**",
-                    (
-                        "- Successful paired tasks usable for efficiency: "
-                        f"**{pair['successful_paired_tasks_observed']}**"
-                    ),
-                    (
-                        "- Additional complete pairs needed for quality/evaluation: "
-                        f"**{pair['quality_paired_tasks_remaining']}**"
-                    ),
-                    (
-                        "- Additional successful pairs needed for efficiency: "
-                        f"**{pair['paired_tasks_remaining']}**"
-                    ),
-                    (
-                        "- Ambiguous/incomplete task IDs: "
-                        f"**{len(pair['ambiguous_task_ids'])}/{len(pair['incomplete_task_ids'])}**"
-                    ),
+                    (f"- Successful paired tasks usable for efficiency: **{pair['successful_paired_tasks_observed']}**"),
+                    (f"- Additional complete pairs needed for quality/evaluation: **{pair['quality_paired_tasks_remaining']}**"),
+                    (f"- Additional successful pairs needed for efficiency: **{pair['paired_tasks_remaining']}**"),
+                    (f"- Ambiguous/incomplete task IDs: **{len(pair['ambiguous_task_ids'])}/{len(pair['incomplete_task_ids'])}**"),
                     f"- Shared task ID template: `{pair['task_id_template']}`",
                     f"- Why: {pair['rationale']}",
                     "",

@@ -371,9 +371,7 @@ def _add_activity_source_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Track AI model changes and recommend model/mode by workload"
-    )
+    parser = argparse.ArgumentParser(description="Track AI model changes and recommend model/mode by workload")
     sub = parser.add_subparsers(dest="command", required=True)
 
     profile = sub.add_parser("profile")

@@ -54,11 +54,7 @@ def _additional_pairs(
         0,
         PAIRED_EFFICIENCY_MIN - min(current_paired, candidate_paired),
     )
-    confidence_floor = (
-        MIN_FRESH_CANARY_PAIRS
-        if confidence.get("level") == "high"
-        else MEDIUM_CONFIDENCE_CANARY_PAIRS
-    )
+    confidence_floor = MIN_FRESH_CANARY_PAIRS if confidence.get("level") == "high" else MEDIUM_CONFIDENCE_CANARY_PAIRS
     return max(MIN_FRESH_CANARY_PAIRS, confidence_floor, quality_gap, efficiency_gap)
 
 
@@ -122,10 +118,7 @@ def build_promotion_plans(
 
         gaps: list[str] = []
         if current_evidence is None:
-            gaps.append(
-                "The current router configuration has no exact controlled leaderboard row; "
-                "fresh canary pairs must establish its baseline."
-            )
+            gaps.append("The current router configuration has no exact controlled leaderboard row; fresh canary pairs must establish its baseline.")
         else:
             if int(current_evidence.get("observations", 0)) < EXACT_FEEDBACK_MIN:
                 gaps.append("Current route needs more exact controlled outcome observations.")
@@ -153,10 +146,7 @@ def build_promotion_plans(
                         "Run both current and candidate on the same fresh task IDs for at least "
                         f"{pairs} paired trials; do not mix unmatched workloads."
                     ),
-                    (
-                        "After adding the canary evidence, the category leaderboard must still "
-                        "return `promote` with the same candidate as winner."
-                    ),
+                    ("After adding the canary evidence, the category leaderboard must still return `promote` with the same candidate as winner."),
                     (
                         f"Promotion must still clear quality margin >= {QUALITY_PROMOTION_MARGIN:.2f}, "
                         "or clear the efficiency path with both sides efficiency-ready, empirical "
@@ -207,19 +197,10 @@ def promotion_plans_markdown(report: dict[str, Any]) -> str:
         current_label = "—"
         candidate_label = "—"
         if current:
-            current_label = (
-                f"`{current.get('model_id')} / {current.get('effort')} / "
-                f"{current.get('execution_mode')}`"
-            )
+            current_label = f"`{current.get('model_id')} / {current.get('effort')} / {current.get('execution_mode')}`"
         if candidate:
-            candidate_label = (
-                f"`{candidate.get('model_id')} / {candidate.get('effort')} / "
-                f"{candidate.get('execution_mode')}`"
-            )
-        lines.append(
-            f"| {plan['category']} | **{plan['state']}** | {current_label} | "
-            f"{candidate_label} | {plan['recommended_paired_trials']} |"
-        )
+            candidate_label = f"`{candidate.get('model_id')} / {candidate.get('effort')} / {candidate.get('execution_mode')}`"
+        lines.append(f"| {plan['category']} | **{plan['state']}** | {current_label} | {candidate_label} | {plan['recommended_paired_trials']} |")
 
     for plan in report["plans"]:
         if plan["state"] != "ready_for_canary":
