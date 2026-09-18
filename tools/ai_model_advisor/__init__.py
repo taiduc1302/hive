@@ -24,4 +24,4 @@ __all__ = [
     "evaluate_promotion_canary",
     "recommend_for_target",
 ]
-__version__ = "0.18.0"
+__version__ = "0.19.0"

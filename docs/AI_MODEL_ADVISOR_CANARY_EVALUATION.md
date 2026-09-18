@@ -1,6 +1,6 @@
 # AI Model Advisor Canary Evaluation
 
-AI Model Advisor v0.18 adds a review-only evaluator for promotion canaries.
+AI Model Advisor v0.18 added the review-only promotion-canary evaluator. v0.19 hardens its evidence matching so duplicate attempts cannot silently become promotion evidence.
 
 The evaluator consumes two explicit inputs:
 
@@ -36,6 +36,12 @@ Only task IDs present for both the exact current configuration and exact candida
 The exact configuration identity is:
 
 `model_id + effort + execution_mode`
+
+### Duplicate-attempt integrity
+
+A task ID is also excluded when either exact configuration has more than one record for that same task ID. The evaluator treats that task as **ambiguous** rather than guessing which retry or re-run should represent the canary result.
+
+This mirrors the controlled experiment evaluator: duplicate attempts are evidence-quality problems, not extra votes. JSON and Markdown outputs report both ambiguous duplicate task IDs and incomplete one-sided task IDs so the operator can repair the canary dataset before making a promotion decision.
 
 ## Independent fresh-evidence check
 
