@@ -495,11 +495,7 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
             {"num_ctx": worker_llm.get("num_ctx", 16384)},
         )
 
-    extra_body = worker_llm.get("extra_body")
-    kwargs: dict[str, Any] = {}
-    if isinstance(extra_body, dict) and extra_body:
-        kwargs["extra_body"] = extra_body
-    return _with_reasoning_effort(worker_llm, kwargs)
+    return _with_reasoning_effort(worker_llm, {})
 
 
 DEFAULT_MAX_CONTEXT_TOKENS = 32_000
