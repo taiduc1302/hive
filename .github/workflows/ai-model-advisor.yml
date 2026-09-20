@@ -360,13 +360,14 @@ jobs:
                   "api_key": "SMOKE_SECRET_MUST_NOT_LEAK",
               }
           }
-          Path("model-advisor-output/hive-config-after-smoke.json").write_text(
-              json.dumps(config), encoding="utf-8"
-          )
+          import os
+
+          target = Path(os.environ["RUNNER_TEMP"]) / "hive-config-after-smoke.json"
+          target.write_text(json.dumps(config), encoding="utf-8")
           PY
           python -m tools.ai_model_advisor.cli hive-promotion-receipt \
             --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
-            --hive-config model-advisor-output/hive-config-after-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-after-smoke.json" \
             --output model-advisor-output/hive-promotion-receipt-smoke.md \
             --json-output model-advisor-output/hive-promotion-receipt-smoke.json
           python - <<'PY'
