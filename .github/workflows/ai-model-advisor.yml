@@ -16,6 +16,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
       - "docs/AI_MODEL_ADVISOR_PROMOTION_PLANS.md"
+      - "docs/AI_MODEL_ADVISOR_CANARY_EVALUATION.md"
       - "docs/AI_MODEL_ADVISOR_PROMOTION_REVIEW.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
       - "core/framework/config.py"
