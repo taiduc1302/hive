@@ -1,0 +1,42 @@
+name: Apply Advisor Locked Ruff Format
+
+on:
+  push:
+    paths:
+      - ".github/workflows/apply-advisor-format.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ai-model-advisor-v0.21
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Install locked repo dependencies
+        run: uv sync --project core --group dev
+      - name: Format Advisor package
+        run: uv run --project core ruff format tools/ai_model_advisor
+      - name: Verify all tools formatting and lint
+        run: |
+          uv run --project core ruff format --check tools/
+          uv run --project core ruff check tools/
+      - name: Commit formatting
+        run: |
+          if git diff --quiet -- tools/ai_model_advisor; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/ai_model_advisor
+          git commit -m "style: format AI Model Advisor with locked Ruff"
+          git push origin HEAD:feature/ai-model-advisor-v0.21
