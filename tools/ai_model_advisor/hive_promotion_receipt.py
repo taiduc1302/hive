@@ -61,6 +61,41 @@ def _expected_sections(preview: dict[str, Any]) -> list[str]:
     return sections
 
 
+def _expected_patch(
+    config: dict[str, str],
+    sections: list[str],
+) -> dict[str, dict[str, Any]]:
+    effort: str | None = config["effort"]
+    if effort == "default":
+        effort = None
+    section_patch = {
+        "model": config["model_id"],
+        "reasoning_effort": effort,
+    }
+    return {section: dict(section_patch) for section in sections}
+
+
+def _validate_reviewed_patches(
+    preview: dict[str, Any],
+    *,
+    after: dict[str, str],
+    rollback: dict[str, str],
+    sections: list[str],
+) -> None:
+    apply_patch = preview.get("apply_patch")
+    rollback_patch = preview.get("rollback_patch")
+    if apply_patch != _expected_patch(after, sections):
+        raise HivePromotionReceiptError(
+            "apply_patch must exactly match the reviewed after configuration "
+            "for the verified Hive sections"
+        )
+    if rollback_patch != _expected_patch(rollback, sections):
+        raise HivePromotionReceiptError(
+            "rollback_patch must exactly match the reviewed rollback configuration "
+            "for the verified Hive sections"
+        )
+
+
 def _validate_preview(
     preview: dict[str, Any],
 ) -> tuple[dict[str, str], dict[str, str], list[str]]:
@@ -98,7 +133,14 @@ def _validate_preview(
             "receipt verification supports execution_mode=single only"
         )
 
-    return before, after, _expected_sections(preview)
+    sections = _expected_sections(preview)
+    _validate_reviewed_patches(
+        preview,
+        after=after,
+        rollback=rollback,
+        sections=sections,
+    )
+    return before, after, sections
 
 
 def _normalized_section(section: Any) -> dict[str, Any]:
