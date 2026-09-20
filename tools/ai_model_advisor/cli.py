@@ -19,6 +19,10 @@ from .hive_promotion_preview import (
     build_hive_promotion_preview,
     render_markdown as hive_promotion_preview_markdown,
 )
+from .hive_promotion_receipt import (
+    build_hive_promotion_receipt,
+    render_markdown as hive_promotion_receipt_markdown,
+)
 from .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
@@ -344,6 +348,27 @@ def command_hive_promotion_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
+    preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
+    if not isinstance(preview, dict):
+        raise ValueError("promotion preview root must be a JSON object")
+    current_config = json.loads(Path(args.hive_config).read_text(encoding="utf-8"))
+    if not isinstance(current_config, dict):
+        raise ValueError("Hive configuration root must be a JSON object")
+    receipt = build_hive_promotion_receipt(preview, current_config)
+    markdown = hive_promotion_receipt_markdown(receipt)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(receipt, ensure_ascii=False, indent=2) + "\n",
+        )
+    return 0
+
+
 def command_feedback_import_hive(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
     report = import_hive_trace(
@@ -574,6 +599,16 @@ def build_parser() -> argparse.ArgumentParser:
     hive_promotion_preview.add_argument("--output", help="Optional Markdown Hive promotion preview")
     hive_promotion_preview.add_argument("--json-output")
     hive_promotion_preview.set_defaults(func=command_hive_promotion_preview)
+
+    hive_promotion_receipt = sub.add_parser("hive-promotion-receipt")
+    hive_promotion_receipt.add_argument("--promotion-preview", required=True)
+    hive_promotion_receipt.add_argument("--hive-config", required=True)
+    hive_promotion_receipt.add_argument(
+        "--output",
+        help="Optional Markdown Hive promotion verification receipt",
+    )
+    hive_promotion_receipt.add_argument("--json-output")
+    hive_promotion_receipt.set_defaults(func=command_hive_promotion_receipt)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
