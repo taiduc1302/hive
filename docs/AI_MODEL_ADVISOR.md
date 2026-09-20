@@ -24,6 +24,12 @@ The daily GitHub Action persists a compact fingerprint baseline in GitHub Action
 
 If an official source temporarily fails to load, its previous hash is preserved. A transient network failure therefore does not erase history and create a false change on the following run.
 
+## Canary evidence integrity
+
+Promotion-canary evaluation uses only exact matched task IDs from the dedicated fresh canary feedback file. A task is excluded when either exact configuration has duplicate attempts for that task ID, and one-sided attempts are reported as incomplete. The evaluator never guesses which retry should count as the canary result.
+
+This keeps fresh canary evidence aligned with the controlled experiment evaluator, which also excludes ambiguous duplicate attempts rather than averaging or last-write-wins selection.
+
 ## Privacy boundary
 
 There is no hidden API in this project for reading a user's entire ChatGPT profile/history. The advisor analyzes only data explicitly available to it: a supplied ChatGPT export, generic activity JSON, GitHub events, explicitly authorized sources, or local Hive telemetry that the user deliberately points the importer at.
@@ -173,6 +179,18 @@ Failed fast attempts never receive an efficiency reward. Unpaired latency/cost r
 Token/cache/credit telemetry is deliberately not folded into this efficiency adjustment yet. That would require a task-normalized policy that distinguishes useful reasoning, provider pricing, prompt caching, and execution-mode overhead rather than assuming fewer tokens are intrinsically better.
 
 This design intentionally favors repeated A/B-style evidence over anecdotal absolute numbers.
+
+## Promotion safety chain
+
+After a fresh canary becomes eligible, v0.20 adds a final fail-closed review before any manual routing change:
+
+    python -m tools.ai_model_advisor.cli promotion-review \
+      --canary-evaluation /tmp/canary-evaluation.json \
+      --routing-matrix /tmp/current-routing-matrix.json \
+      --output /tmp/promotion-review.md \
+      --json-output /tmp/promotion-review.json
+
+The command re-checks the current primary route. If it drifted since the canary was planned, promotion is blocked and must be re-planned. A ready package records exact before, after, and rollback configurations but never mutates policy itself.
 
 ## Recommendation dimensions
 

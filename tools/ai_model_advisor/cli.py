@@ -22,6 +22,7 @@ from .hive_trace import (
 )
 from .matrix import build_routing_matrix, routing_matrix_markdown
 from .promotion_plan import build_promotion_plans, promotion_plans_markdown
+from .promotion_review import build_promotion_review, promotion_review_markdown
 from .readiness import build_experiment_readiness, experiment_readiness_markdown
 from .recommend import RecommendationEngine
 from .registry import ModelRegistry
@@ -296,6 +297,27 @@ def command_promotion_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_promotion_review(args: argparse.Namespace) -> int:
+    canary_report = json.loads(Path(args.canary_evaluation).read_text(encoding="utf-8"))
+    if not isinstance(canary_report, dict):
+        raise ValueError("canary evaluation root must be a JSON object")
+    report = build_promotion_review(
+        canary_report,
+        _routing_matrix_rows(args.routing_matrix),
+    )
+    markdown = promotion_review_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        )
+    return 0
+
+
 def command_feedback_import_hive(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
     report = import_hive_trace(
@@ -371,9 +393,7 @@ def _add_activity_source_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Track AI model changes and recommend model/mode by workload"
-    )
+    parser = argparse.ArgumentParser(description="Track AI model changes and recommend model/mode by workload")
     sub = parser.add_subparsers(dest="command", required=True)
 
     profile = sub.add_parser("profile")
@@ -513,6 +533,13 @@ def build_parser() -> argparse.ArgumentParser:
     promotion_plan.add_argument("--output", help="Optional Markdown promotion/canary plan")
     promotion_plan.add_argument("--json-output")
     promotion_plan.set_defaults(func=command_promotion_plan)
+
+    promotion_review = sub.add_parser("promotion-review")
+    promotion_review.add_argument("--canary-evaluation", required=True)
+    promotion_review.add_argument("--routing-matrix", required=True)
+    promotion_review.add_argument("--output", help="Optional Markdown manual promotion review")
+    promotion_review.add_argument("--json-output")
+    promotion_review.set_defaults(func=command_promotion_review)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")

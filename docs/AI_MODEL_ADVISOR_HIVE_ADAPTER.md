@@ -66,3 +66,38 @@ Successful transport returns `outcome: "partial"`; the deterministic judge is st
 Do not add a model/version allowlist just because the Advisor registry lists a model. Let the installed Hive/LiteLLM stack attempt the request, then require the captured post-transform body to prove that the requested model and effort semantics were actually applied.
 
 A future AgentLoop/colony adapter should use the same principle: prove host-specific execution controls from runtime telemetry instead of inferring them from configuration intent.
+
+
+## Native Hive configuration bridge
+
+Advisor v0.19.0 also adds an opt-in reasoning-effort bridge for normal Hive sessions.
+
+The following keys are now forwarded through Hive's existing `RuntimeConfig.extra_kwargs -> LiteLLMProvider` path:
+
+- `llm.reasoning_effort` for queen/default sessions;
+- `worker_llm.reasoning_effort` for worker sessions.
+
+Hive does not translate the value or silently downgrade it. The value must be a non-empty string; model/provider compatibility remains the responsibility of the installed LiteLLM/provider stack.
+
+This is separate from the experiment adapter above. The experiment adapter constructs a dedicated single-call provider directly. The native config bridge applies to ordinary Hive runtime configuration.
+
+### Preview a recommendation as a config patch
+
+Generate a non-mutating merge-patch preview from an Advisor recommendation JSON:
+
+```bash
+python -m tools.ai_model_advisor.hive_config_preview \
+  --recommendation model-advisor-output/recommendation.json \
+  --scope queen
+
+python -m tools.ai_model_advisor.hive_config_preview \
+  --recommendation model-advisor-output/recommendation.json \
+  --scope both \
+  --json
+```
+
+Scopes are `queen`, `worker`, or `both`.
+
+The preview changes reasoning effort only. It does not change credentials, provider, model, or orchestration, and it never edits `configuration.json` automatically.
+
+For `effort=default`, the merge patch uses `null` for `reasoning_effort`, meaning the explicit override should be removed so the provider default is restored.

@@ -136,12 +136,7 @@ def build_target_experiment_plan(
                 execution_target,
             )
             effort_challenger = next(
-                (
-                    candidate
-                    for candidate in same_model
-                    if candidate.execution_mode == primary.execution_mode
-                    and candidate.effort != primary.effort
-                ),
+                (candidate for candidate in same_model if candidate.execution_mode == primary.execution_mode and candidate.effort != primary.effort),
                 None,
             )
             if effort_challenger is not None:
@@ -157,12 +152,7 @@ def build_target_experiment_plan(
                 )
 
             execution_challenger = next(
-                (
-                    candidate
-                    for candidate in same_model
-                    if candidate.effort == primary.effort
-                    and candidate.execution_mode != primary.execution_mode
-                ),
+                (candidate for candidate in same_model if candidate.effort == primary.effort and candidate.execution_mode != primary.execution_mode),
                 None,
             )
             if execution_challenger is not None:
@@ -200,9 +190,7 @@ def build_target_experiment_plan(
         "categories": categories,
         "experiments": len(all_pairs),
         "planned_experiments": sum(pair["status"] == "planned" for pair in all_pairs),
-        "collecting_experiments": sum(
-            pair["status"] == "collecting" for pair in all_pairs
-        ),
+        "collecting_experiments": sum(pair["status"] == "collecting" for pair in all_pairs),
         "ready_experiments": sum(pair["status"] == "ready" for pair in all_pairs),
     }
     return bind_execution_target(plan, execution_target)
@@ -220,9 +208,7 @@ def _activity_texts(args: argparse.Namespace, analyzer: ActivityAnalyzer) -> lis
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Build an experiment plan inside a trusted execution target's executable space."
-    )
+    parser = argparse.ArgumentParser(description="Build an experiment plan inside a trusted execution target's executable space.")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--input")
     source.add_argument("--chatgpt-export")
@@ -258,10 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             "# Target-Aware AI Model Advisor Experiment Plan",
             "",
             f"Execution target: **{target.host}** (`{target.adapter}`)",
-            (
-                "All proposed configurations were ranked inside this target's trusted "
-                "execution contract before the plan was bound."
-            ),
+            ("All proposed configurations were ranked inside this target's trusted execution contract before the plan was bound."),
             "",
         ]
     )
@@ -271,8 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(args.output).write_text(prefix + markdown, encoding="utf-8")
     Path(args.json_output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.json_output).write_text(
-        json.dumps({"registry_as_of": registry.as_of, **plan}, indent=2, ensure_ascii=False)
-        + "\n",
+        json.dumps({"registry_as_of": registry.as_of, **plan}, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     return 0

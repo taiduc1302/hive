@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -30,25 +31,41 @@ def _matched_records(
     current: dict[str, Any],
     candidate: dict[str, Any],
     category: str,
-) -> tuple[list[UsageRecord], list[UsageRecord], set[str]]:
+) -> tuple[
+    list[UsageRecord],
+    list[UsageRecord],
+    set[str],
+    set[str],
+    set[str],
+]:
     current_key = _config_key(current)
     candidate_key = _config_key(candidate)
-    current_by_task: dict[str, UsageRecord] = {}
-    candidate_by_task: dict[str, UsageRecord] = {}
+    current_by_task: dict[str, list[UsageRecord]] = defaultdict(list)
+    candidate_by_task: dict[str, list[UsageRecord]] = defaultdict(list)
 
     for record in records:
         if record.task_category != category or not record.task_id:
             continue
         if _record_key(record) == current_key:
-            current_by_task[record.task_id] = record
+            current_by_task[record.task_id].append(record)
         elif _record_key(record) == candidate_key:
-            candidate_by_task[record.task_id] = record
+            candidate_by_task[record.task_id].append(record)
 
-    matched = set(current_by_task) & set(candidate_by_task)
+    all_task_ids = set(current_by_task) | set(candidate_by_task)
+    ambiguous = {task_id for task_id in all_task_ids if len(current_by_task.get(task_id, [])) > 1 or len(candidate_by_task.get(task_id, [])) > 1}
+    matched = {
+        task_id
+        for task_id in all_task_ids
+        if task_id not in ambiguous and len(current_by_task.get(task_id, [])) == 1 and len(candidate_by_task.get(task_id, [])) == 1
+    }
+    incomplete = all_task_ids - ambiguous - matched
+
     return (
-        [current_by_task[task_id] for task_id in sorted(matched)],
-        [candidate_by_task[task_id] for task_id in sorted(matched)],
+        [current_by_task[task_id][0] for task_id in sorted(matched)],
+        [candidate_by_task[task_id][0] for task_id in sorted(matched)],
         matched,
+        ambiguous,
+        incomplete,
     )
 
 
@@ -77,7 +94,13 @@ def _evaluate_ready_plan(plan: dict[str, Any], store: FeedbackStore) -> dict[str
     current = plan.get("current") or {}
     candidate = plan.get("candidate") or {}
     required_pairs = int(plan.get("recommended_paired_trials", 0))
-    current_records, candidate_records, matched = _matched_records(
+    (
+        current_records,
+        candidate_records,
+        matched,
+        ambiguous,
+        incomplete,
+    ) = _matched_records(
         store.records,
         current,
         candidate,
@@ -96,24 +119,16 @@ def _evaluate_ready_plan(plan: dict[str, Any], store: FeedbackStore) -> dict[str
 
     if matched_pairs >= 3 and failure_regression > MAX_FAILURE_RATE_REGRESSION:
         state = "rollback_candidate"
-        reason = (
-            "Candidate failure rate materially regressed against the current route on matched canary tasks."
-        )
+        reason = "Candidate failure rate materially regressed against the current route on matched canary tasks."
     elif matched_pairs < required_pairs:
         state = "continue_canary"
-        reason = (
-            f"Only {matched_pairs} matched canary pairs are available; {required_pairs} are required by the plan."
-        )
+        reason = f"Only {matched_pairs} matched canary pairs are available; {required_pairs} are required by the plan."
     elif not decision or decision.get("status") != "promote" or not winner_matches_candidate:
         state = "continue_canary"
-        reason = (
-            "The fresh matched canary evidence does not yet re-confirm the proposed candidate as an empirical promotion."
-        )
+        reason = "The fresh matched canary evidence does not yet re-confirm the proposed candidate as an empirical promotion."
     else:
         state = "eligible_for_manual_promotion"
-        reason = (
-            "The required fresh matched trials are complete and independently re-confirm the same candidate as promoted."
-        )
+        reason = "The required fresh matched trials are complete and independently re-confirm the same candidate as promoted."
 
     return {
         "category": category,
@@ -122,6 +137,10 @@ def _evaluate_ready_plan(plan: dict[str, Any], store: FeedbackStore) -> dict[str
         "candidate": candidate,
         "required_pairs": required_pairs,
         "matched_pairs": matched_pairs,
+        "ambiguous_pairs_excluded": len(ambiguous),
+        "ambiguous_task_ids": sorted(ambiguous),
+        "incomplete_pairs_excluded": len(incomplete),
+        "incomplete_task_ids": sorted(incomplete),
         "current_failure_rate": round(current_failure_rate, 6),
         "candidate_failure_rate": round(candidate_failure_rate, 6),
         "failure_rate_regression": round(failure_regression, 6),
@@ -150,6 +169,10 @@ def evaluate_promotion_canary(
                     "candidate": plan.get("candidate"),
                     "required_pairs": int(plan.get("recommended_paired_trials", 0)),
                     "matched_pairs": 0,
+                    "ambiguous_pairs_excluded": 0,
+                    "ambiguous_task_ids": [],
+                    "incomplete_pairs_excluded": 0,
+                    "incomplete_task_ids": [],
                     "reason": "This category does not currently have an active promotion canary plan.",
                     "safe_to_apply": False,
                     "requires_human_approval": False,
@@ -162,10 +185,9 @@ def evaluate_promotion_canary(
     return {
         "records": len(canary_feedback.records),
         "evaluations": evaluations,
-        "state_counts": {
-            state: sum(item["state"] == state for item in evaluations)
-            for state in states
-        },
+        "state_counts": {state: sum(item["state"] == state for item in evaluations) for state in states},
+        "ambiguous_pairs_excluded": sum(int(item.get("ambiguous_pairs_excluded", 0)) for item in evaluations),
+        "incomplete_pairs_excluded": sum(int(item.get("incomplete_pairs_excluded", 0)) for item in evaluations),
         "automatic_policy_mutation": False,
         "automatic_rollback": False,
     }
@@ -177,8 +199,8 @@ def canary_evaluation_markdown(report: dict[str, Any]) -> str:
         "",
         "Evaluation uses only the supplied fresh canary feedback file and exact matched task IDs.",
         "",
-        "| Category | Decision | Matched / Required | Current failure | Candidate failure |",
-        "|---|---|---:|---:|---:|",
+        "| Category | Decision | Matched / Required | Ambiguous excluded | Current failure | Candidate failure |",
+        "|---|---|---:|---:|---:|---:|",
     ]
     for item in report["evaluations"]:
         current_failure = item.get("current_failure_rate")
@@ -188,9 +210,14 @@ def canary_evaluation_markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"| {item['category']} | **{item['state']}** | "
             f"{item.get('matched_pairs', 0)} / {item.get('required_pairs', 0)} | "
+            f"{item.get('ambiguous_pairs_excluded', 0)} | "
             f"{current_label} | {candidate_label} |"
         )
         lines.extend(["", f"- **{item['category']}**: {item['reason']}"])
+        if item.get("ambiguous_task_ids"):
+            lines.append("- Ambiguous duplicate task IDs excluded: " + ", ".join(f"`{task_id}`" for task_id in item["ambiguous_task_ids"]))
+        if item.get("incomplete_task_ids"):
+            lines.append("- Incomplete one-sided task IDs excluded: " + ", ".join(f"`{task_id}`" for task_id in item["incomplete_task_ids"]))
 
     lines.extend(
         [

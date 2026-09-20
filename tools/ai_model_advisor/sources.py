@@ -82,9 +82,7 @@ class ScanReport:
 def _fetch_text(url: str) -> str:
     request = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": "hive-ai-model-advisor/0.1 (+https://github.com/taiduc1302/hive)"
-        },
+        headers={"User-Agent": "hive-ai-model-advisor/0.1 (+https://github.com/taiduc1302/hive)"},
     )
     with urllib.request.urlopen(request, timeout=35) as response:
         raw = response.read().decode("utf-8", errors="replace")
@@ -174,17 +172,9 @@ def scan_official_sources(
         results.append(result)
 
     known = _known_model_signals(registry)
-    unknown = [
-        signal
-        for signal in sorted(all_signals, key=str.lower)
-        if _is_unregistered_model_signal(signal, known)
-    ]
+    unknown = [signal for signal in sorted(all_signals, key=str.lower) if _is_unregistered_model_signal(signal, known)]
 
-    previous_all = {
-        signal.lower()
-        for signals in previous_source_signals.values()
-        for signal in signals
-    }
+    previous_all = {signal.lower() for signals in previous_source_signals.values() for signal in signals}
     new_by_lower: dict[str, str] = {}
     for item in results:
         previous = previous_source_signals.get(item.source_id)
@@ -199,14 +189,8 @@ def scan_official_sources(
                 continue
             new_by_lower.setdefault(lowered, signal)
 
-    unbaselined_sources = [
-        item.source_id
-        for item in results
-        if item.ok and item.source_id not in previous_source_signals
-    ]
-    signal_baseline_ready = any(
-        source_id in previous_source_signals for source_id in registry.sources
-    )
+    unbaselined_sources = [item.source_id for item in results if item.ok and item.source_id not in previous_source_signals]
+    signal_baseline_ready = any(source_id in previous_source_signals for source_id in registry.sources)
     return ScanReport(
         datetime.now(UTC).isoformat(timespec="seconds"),
         registry.as_of,

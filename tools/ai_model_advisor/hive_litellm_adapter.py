@@ -58,18 +58,13 @@ def validate_runner_payload(payload: dict[str, Any]) -> tuple[str, dict[str, str
     if payload.get("schema_version") != _RUNNER_SCHEMA_VERSION:
         raise HiveAdapterError(f"runner schema_version must be {_RUNNER_SCHEMA_VERSION}")
     if payload.get("acceptance_mode") != "external_judge":
-        raise HiveAdapterError(
-            "Hive transport requires acceptance_mode=external_judge; a successful provider call is not benchmark success"
-        )
+        raise HiveAdapterError("Hive transport requires acceptance_mode=external_judge; a successful provider call is not benchmark success")
 
     task = _required_string(payload, "task")
     configuration = payload.get("configuration")
     if not isinstance(configuration, dict):
         raise HiveAdapterError("configuration must be a JSON object")
-    normalized = {
-        key: _required_string(configuration, key)
-        for key in ("provider", "model_id", "effort", "execution_mode")
-    }
+    normalized = {key: _required_string(configuration, key) for key in ("provider", "model_id", "effort", "execution_mode")}
     if normalized["execution_mode"] != "single":
         raise HiveAdapterError(
             "Hive LiteLLM adapter only supports execution_mode=single; "
@@ -114,9 +109,7 @@ def _load_hive_transport(
         from framework.llm import litellm as hive_litellm
         from framework.llm.litellm import LiteLLMProvider
     except ImportError as exc:
-        raise HiveAdapterError(
-            "Hive framework/LiteLLM is not importable; install the repository workspace before using this adapter"
-        ) from exc
+        raise HiveAdapterError("Hive framework/LiteLLM is not importable; install the repository workspace before using this adapter") from exc
 
     provider_kwargs: dict[str, Any] = {
         "model": _provider_model(configuration),
@@ -160,18 +153,13 @@ def _verify_wire_configuration(configuration: dict[str, str], request: dict[str,
     provider_model = _provider_model(configuration)
     actual_model = body.get("model")
     if actual_model not in {model_id, provider_model}:
-        raise HiveAdapterError(
-            f"Hive wire model mismatch: expected {model_id!r} (or {provider_model!r}), got {actual_model!r}"
-        )
+        raise HiveAdapterError(f"Hive wire model mismatch: expected {model_id!r} (or {provider_model!r}), got {actual_model!r}")
 
     expected_effort = configuration["effort"]
     actual_effort = _wire_effort(configuration["provider"], body)
     if expected_effort == "default":
         if actual_effort is not None:
-            raise HiveAdapterError(
-                "Hive/LiteLLM sent an explicit reasoning effort for effort=default; "
-                f"got {actual_effort!r}"
-            )
+            raise HiveAdapterError(f"Hive/LiteLLM sent an explicit reasoning effort for effort=default; got {actual_effort!r}")
         return
     if actual_effort != expected_effort:
         raise HiveAdapterError(
@@ -215,10 +203,7 @@ def _response_result(
 def run_hive_adapter(
     payload: dict[str, Any],
     *,
-    transport_loader: Callable[
-        [dict[str, str], float], tuple[Any, Callable[[], dict[str, Any] | None], str]
-    ]
-    | None = None,
+    transport_loader: Callable[[dict[str, str], float], tuple[Any, Callable[[], dict[str, Any] | None], str]] | None = None,
 ) -> dict[str, Any]:
     task, configuration = validate_runner_payload(payload)
     timeout_seconds = _positive_float_env(

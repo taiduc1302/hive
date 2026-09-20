@@ -9,7 +9,7 @@ The intended flow is:
 3. `promotion-plan` converts only `propose_change` cases into a fresh matched-canary plan.
 4. An operator runs the required controlled trials separately and records them in a dedicated canary feedback JSONL file.
 5. v0.18 `canary_evaluate` evaluates only that fresh matched canary evidence and returns `eligible_for_manual_promotion`, `continue_canary`, or `rollback_candidate`.
-6. Only `eligible_for_manual_promotion` makes the change eligible for a separate human-reviewed router edit.
+6. Only `eligible_for_manual_promotion` makes the change eligible for further review.\n7. v0.20 `promotion-review` re-reads the current routing matrix, blocks stale route drift, and emits an exact before/after/rollback package for a separate human edit.
 
 ## Command
 
@@ -61,3 +61,4 @@ The v0.18 evaluator can return `rollback_candidate`, but it does not execute rol
 ## Safety boundary
 
 The planner never runs providers, never launches canary traffic, never edits routing policy, and never marks a plan safe for automatic application. Passing a canary only makes a routing change eligible for separate human review.
+\n## v0.20 promotion review\n\nA successful canary is not treated as permanent authorization. Run `promotion-review` against a freshly generated routing matrix before editing any operator-owned routing layer. If the live primary no longer matches the exact pre-canary current configuration, the result is `blocked_route_drift` and the canary must be re-planned. Even `ready_for_manual_edit` keeps `safe_to_apply: false` and contains only a review manifest, never an automatic policy mutation.\n
