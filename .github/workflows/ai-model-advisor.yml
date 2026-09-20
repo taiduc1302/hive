@@ -336,7 +336,7 @@ jobs:
           cat model-advisor-output/promotion-plan-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/promotion-review-smoke.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\\n---\\n\\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-runtime-capabilities.md >> "$GITHUB_STEP_SUMMARY"
