@@ -146,3 +146,18 @@ def test_missing_category_is_rejected() -> None:
             _report(),
             category="research",
         )
+
+
+def test_central_cli_exposes_hive_promotion_preview() -> None:
+    args = build_parser().parse_args(
+        [
+            "hive-promotion-preview",
+            "--promotion-review",
+            "review.json",
+            "--category",
+            "debugging",
+        ]
+    )
+
+    assert args.func.__name__ == "command_hive_promotion_preview"
+    assert args.scope == "queen"
