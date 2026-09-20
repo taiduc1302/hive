@@ -15,7 +15,11 @@ from .experiment_run_cli import main as experiment_run_main
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
-from .hive_promotion_preview import (\n    build_hive_promotion_preview,\n    render_markdown as hive_promotion_preview_markdown,\n)\nfrom .hive_trace import (
+from .hive_promotion_preview import (
+    build_hive_promotion_preview,
+    render_markdown as hive_promotion_preview_markdown,
+)
+from .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
     import_report_markdown,
