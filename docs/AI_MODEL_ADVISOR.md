@@ -180,6 +180,18 @@ Token/cache/credit telemetry is deliberately not folded into this efficiency adj
 
 This design intentionally favors repeated A/B-style evidence over anecdotal absolute numbers.
 
+## Promotion safety chain
+
+After a fresh canary becomes eligible, v0.20 adds a final fail-closed review before any manual routing change:
+
+    python -m tools.ai_model_advisor.cli promotion-review \
+      --canary-evaluation /tmp/canary-evaluation.json \
+      --routing-matrix /tmp/current-routing-matrix.json \
+      --output /tmp/promotion-review.md \
+      --json-output /tmp/promotion-review.json
+
+The command re-checks the current primary route. If it drifted since the canary was planned, promotion is blocked and must be re-planned. A ready package records exact before, after, and rollback configurations but never mutates policy itself.
+
 ## Recommendation dimensions
 
 The classifier estimates coding, reasoning, agentic behavior, ambiguity, breadth, parallelism, latency sensitivity, and cost sensitivity on a 1-5 scale. The router deliberately applies an overkill penalty so a frontier model at maximum effort is not the default for routine work.
