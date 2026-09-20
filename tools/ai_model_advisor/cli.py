@@ -298,9 +298,7 @@ def command_promotion_plan(args: argparse.Namespace) -> int:
 
 
 def command_promotion_review(args: argparse.Namespace) -> int:
-    canary_report = json.loads(
-        Path(args.canary_evaluation).read_text(encoding="utf-8")
-    )
+    canary_report = json.loads(Path(args.canary_evaluation).read_text(encoding="utf-8"))
     if not isinstance(canary_report, dict):
         raise ValueError("canary evaluation root must be a JSON object")
     report = build_promotion_review(
@@ -395,9 +393,7 @@ def _add_activity_source_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Track AI model changes and recommend model/mode by workload"
-    )
+    parser = argparse.ArgumentParser(description="Track AI model changes and recommend model/mode by workload")
     sub = parser.add_subparsers(dest="command", required=True)
 
     profile = sub.add_parser("profile")

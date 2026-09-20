@@ -68,28 +68,19 @@ def validate_runner_payload(payload: dict[str, Any]) -> tuple[str, dict[str, str
     if payload.get("schema_version") != _RUNNER_SCHEMA_VERSION:
         raise ProviderAdapterError(f"runner schema_version must be {_RUNNER_SCHEMA_VERSION}")
     if payload.get("acceptance_mode") != "external_judge":
-        raise ProviderAdapterError(
-            "direct provider adapter requires acceptance_mode=external_judge; "
-            "HTTP completion is not benchmark success"
-        )
+        raise ProviderAdapterError("direct provider adapter requires acceptance_mode=external_judge; HTTP completion is not benchmark success")
 
     task = _required_string(payload, "task")
     configuration = payload.get("configuration")
     if not isinstance(configuration, dict):
         raise ProviderAdapterError("configuration must be a JSON object")
-    normalized = {
-        key: _required_string(configuration, key)
-        for key in ("provider", "model_id", "effort", "execution_mode")
-    }
+    normalized = {key: _required_string(configuration, key) for key in ("provider", "model_id", "effort", "execution_mode")}
     if normalized["execution_mode"] != "single":
         raise ProviderAdapterError(
-            "direct provider API adapter only supports execution_mode=single; "
-            "orchestration modes require a host-specific adapter"
+            "direct provider API adapter only supports execution_mode=single; orchestration modes require a host-specific adapter"
         )
     if normalized["provider"] not in {"openai", "anthropic"}:
-        raise ProviderAdapterError(
-            f"unsupported direct API provider: {normalized['provider']}"
-        )
+        raise ProviderAdapterError(f"unsupported direct API provider: {normalized['provider']}")
     return task, normalized, str(payload.get("task_sha256") or "")
 
 
@@ -240,9 +231,7 @@ def _verify_openai_effort_echo(request: ProviderRequest, response: dict[str, Any
         return
     applied_effort = reasoning.get("effort")
     if isinstance(applied_effort, str) and applied_effort != request.configuration["effort"]:
-        raise ProviderAdapterError(
-            "OpenAI response reasoning.effort does not match the saved experiment configuration"
-        )
+        raise ProviderAdapterError("OpenAI response reasoning.effort does not match the saved experiment configuration")
 
 
 def parse_provider_response(
@@ -258,11 +247,7 @@ def parse_provider_response(
             raise ProviderAdapterError("OpenAI response status is failed")
         _verify_openai_effort_echo(request, response)
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
-        input_details = (
-            usage.get("input_tokens_details")
-            if isinstance(usage.get("input_tokens_details"), dict)
-            else {}
-        )
+        input_details = usage.get("input_tokens_details") if isinstance(usage.get("input_tokens_details"), dict) else {}
         result = {
             "schema_version": _RUNNER_SCHEMA_VERSION,
             "applied_configuration": request.configuration,

@@ -34,17 +34,13 @@ def _expected_text(args: argparse.Namespace) -> str:
     env_file = os.getenv(_EXPECTED_FILE_ENV)
     if env_file:
         return Path(env_file).read_text(encoding="utf-8")
-    raise ExpectedOutputJudgeError(
-        f"provide --expected, --expected-file, or {_EXPECTED_FILE_ENV}"
-    )
+    raise ExpectedOutputJudgeError(f"provide --expected, --expected-file, or {_EXPECTED_FILE_ENV}")
 
 
 def _mode(args: argparse.Namespace) -> str:
     mode = args.mode or os.getenv(_MODE_ENV) or _DEFAULT_MODE
     if mode not in _VALID_MODES:
-        raise ExpectedOutputJudgeError(
-            f"mode must be one of {', '.join(sorted(_VALID_MODES))}"
-        )
+        raise ExpectedOutputJudgeError(f"mode must be one of {', '.join(sorted(_VALID_MODES))}")
     return mode
 
 
@@ -95,9 +91,7 @@ def judge_expected_output(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Deterministically judge adapter response_text against a fixed expected fixture"
-    )
+    parser = argparse.ArgumentParser(description="Deterministically judge adapter response_text against a fixed expected fixture")
     parser.add_argument(
         "--mode",
         choices=sorted(_VALID_MODES),

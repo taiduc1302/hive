@@ -128,10 +128,7 @@ def _review_item(
         return {
             **base,
             "state": "blocked_inconsistent_canary",
-            "reason": (
-                "The canary payload is internally inconsistent with an eligible "
-                "manual-promotion decision."
-            ),
+            "reason": ("The canary payload is internally inconsistent with an eligible manual-promotion decision."),
         }
     if current_key is None or candidate_key is None:
         return {
@@ -149,19 +146,13 @@ def _review_item(
         return {
             **base,
             "state": "blocked_route_drift",
-            "reason": (
-                "The live routing-matrix primary changed after the canary plan was created. "
-                "Re-plan and re-validate before any manual edit."
-            ),
+            "reason": ("The live routing-matrix primary changed after the canary plan was created. Re-plan and re-validate before any manual edit."),
         }
     if candidate_key == current_key:
         return {
             **base,
             "state": "blocked_no_change",
-            "reason": (
-                "Candidate and current route are identical, so there is no promotion "
-                "change to review."
-            ),
+            "reason": ("Candidate and current route are identical, so there is no promotion change to review."),
         }
 
     before = _compact_config(live_primary) or {}
@@ -185,10 +176,7 @@ def _review_item(
     return {
         **base,
         "state": "ready_for_manual_edit",
-        "reason": (
-            "Fresh canary evidence is eligible and the live routing primary still "
-            "matches the exact pre-canary route."
-        ),
+        "reason": ("Fresh canary evidence is eligible and the live routing primary still matches the exact pre-canary route."),
         "requires_human_approval": True,
         "manual_change": manual_change,
     }
@@ -205,19 +193,11 @@ def build_promotion_review(
         raise ValueError("canary report must not enable automatic rollback")
 
     routes = _route_index(routing_matrix)
-    reviews = [
-        _review_item(item, routes.get(str(item.get("category", "")).strip()))
-        for item in canary_report.get("evaluations", [])
-    ]
+    reviews = [_review_item(item, routes.get(str(item.get("category", "")).strip())) for item in canary_report.get("evaluations", [])]
     return {
         "reviews": reviews,
-        "state_counts": {
-            state: sum(item["state"] == state for item in reviews)
-            for state in _REVIEW_STATES
-        },
-        "ready_changes": sum(
-            item["state"] == "ready_for_manual_edit" for item in reviews
-        ),
+        "state_counts": {state: sum(item["state"] == state for item in reviews) for state in _REVIEW_STATES},
+        "ready_changes": sum(item["state"] == "ready_for_manual_edit" for item in reviews),
         "safe_to_apply": False,
         "automatic_policy_mutation": False,
         "automatic_rollback": False,
@@ -227,10 +207,7 @@ def build_promotion_review(
 def _config_label(config: dict[str, Any] | None) -> str:
     if not config:
         return "—"
-    return (
-        f"{config.get('model_id')} / {config.get('effort')} / "
-        f"{config.get('execution_mode')}"
-    )
+    return f"{config.get('model_id')} / {config.get('effort')} / {config.get('execution_mode')}"
 
 
 def promotion_review_markdown(report: dict[str, Any]) -> str:
@@ -271,8 +248,7 @@ def promotion_review_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "safe_to_apply remains false. A ready package still requires an explicit "
-            "human edit and validation.",
+            "safe_to_apply remains false. A ready package still requires an explicit human edit and validation.",
             "",
         ]
     )
@@ -283,9 +259,7 @@ def _routing_rows(path: str | Path) -> list[dict[str, Any]]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     rows = payload.get("routing_matrix", payload) if isinstance(payload, dict) else payload
     if not isinstance(rows, list):
-        raise ValueError(
-            "routing matrix JSON must be a list or contain a routing_matrix list"
-        )
+        raise ValueError("routing matrix JSON must be a list or contain a routing_matrix list")
     return rows
 
 
@@ -298,18 +272,14 @@ def _write(path: str | None, content: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Build a fail-closed manual routing-promotion review package."
-    )
+    parser = argparse.ArgumentParser(description="Build a fail-closed manual routing-promotion review package.")
     parser.add_argument("--canary-evaluation", required=True)
     parser.add_argument("--routing-matrix", required=True)
     parser.add_argument("--output")
     parser.add_argument("--json-output")
     args = parser.parse_args(argv)
 
-    canary_report = json.loads(
-        Path(args.canary_evaluation).read_text(encoding="utf-8")
-    )
+    canary_report = json.loads(Path(args.canary_evaluation).read_text(encoding="utf-8"))
     if not isinstance(canary_report, dict):
         raise ValueError("canary evaluation root must be a JSON object")
     report = build_promotion_review(

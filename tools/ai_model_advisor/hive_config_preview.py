@@ -24,9 +24,7 @@ def _select_recommendation(payload: dict[str, Any], index: int) -> dict[str, Any
     if not isinstance(recommendations, list) or not recommendations:
         raise HiveConfigPreviewError("recommendation JSON must contain a non-empty recommendations list")
     if index < 0 or index >= len(recommendations):
-        raise HiveConfigPreviewError(
-            f"recommendation index {index} is out of range for {len(recommendations)} recommendations"
-        )
+        raise HiveConfigPreviewError(f"recommendation index {index} is out of range for {len(recommendations)} recommendations")
     recommendation = recommendations[index]
     if not isinstance(recommendation, dict):
         raise HiveConfigPreviewError("selected recommendation must be an object")
@@ -62,10 +60,7 @@ def build_hive_config_preview(
     execution_mode = str(recommendation.get("execution_mode") or "")
     warnings: list[str] = []
     if execution_mode and execution_mode != "single":
-        warnings.append(
-            f"recommended execution_mode={execution_mode!r} is not applied by this patch; "
-            "this preview changes reasoning effort only"
-        )
+        warnings.append(f"recommended execution_mode={execution_mode!r} is not applied by this patch; this preview changes reasoning effort only")
 
     return {
         "schema_version": 1,
@@ -79,9 +74,7 @@ def build_hive_config_preview(
             "execution_mode": recommendation.get("execution_mode"),
         },
         "merge_patch": patch,
-        "merge_patch_semantics": (
-            "RFC 7396-style preview: null removes an explicit reasoning_effort key and restores provider default"
-        ),
+        "merge_patch_semantics": ("RFC 7396-style preview: null removes an explicit reasoning_effort key and restores provider default"),
         "safe_to_auto_apply": False,
         "warnings": warnings,
     }
@@ -115,9 +108,7 @@ def render_markdown(preview: dict[str, Any]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Preview the native Hive reasoning-effort config patch for an Advisor recommendation."
-    )
+    parser = argparse.ArgumentParser(description="Preview the native Hive reasoning-effort config patch for an Advisor recommendation.")
     parser.add_argument("--recommendation", required=True, help="Advisor recommendation JSON")
     parser.add_argument("--index", type=int, default=0, help="Recommendation index (default: 0)")
     parser.add_argument("--scope", choices=_SCOPES, default="queen")
@@ -133,11 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         scope=args.scope,
         index=args.index,
     )
-    text = (
-        json.dumps(preview, indent=2, ensure_ascii=False) + "\n"
-        if args.json
-        else render_markdown(preview)
-    )
+    text = json.dumps(preview, indent=2, ensure_ascii=False) + "\n" if args.json else render_markdown(preview)
     if args.output:
         target = Path(args.output)
         target.parent.mkdir(parents=True, exist_ok=True)

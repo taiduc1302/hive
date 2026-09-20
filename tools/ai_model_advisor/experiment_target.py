@@ -42,9 +42,7 @@ def bind_execution_target(
     if existing is not None and not replace:
         if existing == target:
             return copy.deepcopy(plan)
-        raise ExperimentTargetError(
-            "Experiment plan already has a different execution_target; use --replace only for a deliberate rebind"
-        )
+        raise ExperimentTargetError("Experiment plan already has a different execution_target; use --replace only for a deliberate rebind")
 
     bound = copy.deepcopy(plan)
     bound["execution_target"] = copy.deepcopy(target)
@@ -71,9 +69,7 @@ def target_summary(plan: dict[str, Any]) -> dict[str, Any]:
 def _profile_from_bound_plan(plan: dict[str, Any]):
     summary = target_summary(plan)
     if not summary["bound"]:
-        raise ExperimentTargetError(
-            "Cannot resolve execution-target metadata for an unbound plan"
-        )
+        raise ExperimentTargetError("Cannot resolve execution-target metadata for an unbound plan")
     try:
         return profile_for_adapter(str(summary.get("adapter")))
     except ExecutionTargetCatalogError as exc:
@@ -93,9 +89,7 @@ def canonical_runner_for_target(
 ) -> list[str]:
     """Return canonical argv for a bound execution target."""
     if not target_summary(plan)["bound"]:
-        raise ExperimentTargetError(
-            "Cannot resolve a canonical runner for an unbound plan; bind an execution target first"
-        )
+        raise ExperimentTargetError("Cannot resolve a canonical runner for an unbound plan; bind an execution target first")
     profile = _profile_from_bound_plan(plan)
     return [python_executable or sys.executable, "-m", profile.runner_module]
 
@@ -104,9 +98,7 @@ def _runner_module(argv: list[str]) -> str | None:
     for index, token in enumerate(argv[:-1]):
         if token == "-m":
             return argv[index + 1]
-    known_modules = {
-        profile["runner_module"] for profile in target_catalog().values()
-    }
+    known_modules = {profile["runner_module"] for profile in target_catalog().values()}
     for token in argv:
         normalized = token.replace("\\", "/")
         for module in known_modules:
@@ -131,9 +123,7 @@ def validate_runner_for_target(plan: dict[str, Any], runner_argv: list[str]) -> 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Bind a saved AI Model Advisor experiment plan to an explicit execution host."
-    )
+    parser = argparse.ArgumentParser(description="Bind a saved AI Model Advisor experiment plan to an explicit execution host.")
     parser.add_argument("--plan", required=True, help="JSON produced by experiment-plan")
     parser.add_argument("--host", required=True, choices=sorted(target_catalog()))
     parser.add_argument("--output", required=True, help="Path for the bound JSON plan")

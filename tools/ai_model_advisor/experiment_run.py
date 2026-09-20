@@ -48,16 +48,9 @@ class PairRunReport:
 
 
 def find_experiment(plan: dict[str, Any], experiment_id: str) -> dict[str, Any]:
-    matches = [
-        pair
-        for category in plan.get("categories", [])
-        for pair in category.get("pairs", [])
-        if pair.get("experiment_id") == experiment_id
-    ]
+    matches = [pair for category in plan.get("categories", []) for pair in category.get("pairs", []) if pair.get("experiment_id") == experiment_id]
     if len(matches) != 1:
-        raise ExperimentRunnerError(
-            f"Expected exactly one experiment_id={experiment_id!r}, found {len(matches)}"
-        )
+        raise ExperimentRunnerError(f"Expected exactly one experiment_id={experiment_id!r}, found {len(matches)}")
     pair = matches[0]
     for key in ("category", "kind", "primary", "challenger", "task_id_template"):
         if key not in pair:
@@ -86,9 +79,7 @@ def next_task_id(pair: dict[str, Any], feedback: FeedbackStore) -> tuple[str, in
 def _task_index(pair: dict[str, Any], task_id: str) -> int:
     prefix = _task_prefix(pair)
     if not task_id.startswith(prefix):
-        raise ExperimentRunnerError(
-            f"task_id must start with the saved experiment prefix {prefix!r}"
-        )
+        raise ExperimentRunnerError(f"task_id must start with the saved experiment prefix {prefix!r}")
     suffix = task_id[len(prefix) :]
     if not suffix.isdigit():
         raise ExperimentRunnerError("task_id suffix must be numeric")
@@ -129,9 +120,7 @@ def _record_matches_config(record: UsageRecord, config: dict[str, Any]) -> bool:
     )
 
 
-def current_complete_pair_task_ids(
-    pair: dict[str, Any], feedback: FeedbackStore
-) -> tuple[str, ...]:
+def current_complete_pair_task_ids(pair: dict[str, Any], feedback: FeedbackStore) -> tuple[str, ...]:
     """Return unambiguous complete A/B task IDs from live feedback.
 
     This intentionally recomputes progress instead of trusting the status
@@ -158,24 +147,15 @@ def current_complete_pair_task_ids(
         task = by_task.setdefault(record.task_id, {"A": [], "B": []})
         task[side].append(record)
 
-    return tuple(
-        sorted(
-            task_id
-            for task_id, sides in by_task.items()
-            if len(sides["A"]) == 1 and len(sides["B"]) == 1
-        )
-    )
+    return tuple(sorted(task_id for task_id, sides in by_task.items() if len(sides["A"]) == 1 and len(sides["B"]) == 1))
 
 
-def ensure_experiment_collectable(
-    pair: dict[str, Any], feedback: FeedbackStore, *, allow_ready: bool = False
-) -> tuple[str, ...]:
+def ensure_experiment_collectable(pair: dict[str, Any], feedback: FeedbackStore, *, allow_ready: bool = False) -> tuple[str, ...]:
     complete_task_ids = current_complete_pair_task_ids(pair, feedback)
     ready = pair.get("status") == "ready" or len(complete_task_ids) >= EXACT_FEEDBACK_MIN
     if ready and not allow_ready:
         raise ExperimentRunnerError(
-            "Experiment is already ready for evaluation based on saved or live evidence; "
-            "use allow_ready only for deliberate extra evidence"
+            "Experiment is already ready for evaluation based on saved or live evidence; use allow_ready only for deliberate extra evidence"
         )
     return complete_task_ids
 
@@ -206,19 +186,13 @@ def runner_payload(
 
 def _validate_adapter_identity(result: dict[str, Any], expected: dict[str, Any]) -> None:
     if result.get("schema_version") != _RUNNER_SCHEMA_VERSION:
-        raise RunnerInfrastructureError(
-            f"runner result schema_version must be {_RUNNER_SCHEMA_VERSION}"
-        )
+        raise RunnerInfrastructureError(f"runner result schema_version must be {_RUNNER_SCHEMA_VERSION}")
     applied = result.get("applied_configuration")
     if not isinstance(applied, dict):
-        raise RunnerInfrastructureError(
-            "runner result must echo applied_configuration before evidence can be trusted"
-        )
+        raise RunnerInfrastructureError("runner result must echo applied_configuration before evidence can be trusted")
     normalized = {key: applied.get(key) for key in _CONFIG_KEYS}
     if normalized != expected:
-        raise RunnerInfrastructureError(
-            "runner applied_configuration does not match the saved experiment configuration"
-        )
+        raise RunnerInfrastructureError("runner applied_configuration does not match the saved experiment configuration")
 
 
 def _optional_number(result: dict[str, Any], key: str) -> float | None:
@@ -254,14 +228,10 @@ def result_to_record(
 
     outcome = result.get("outcome")
     if outcome not in _VALID_OUTCOMES:
-        raise RunnerInfrastructureError(
-            "runner result outcome must be success, partial, or failure"
-        )
+        raise RunnerInfrastructureError("runner result outcome must be success, partial, or failure")
     retries = result.get("retries", 0)
     if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
-        raise RunnerInfrastructureError(
-            "runner result retries must be a non-negative integer"
-        )
+        raise RunnerInfrastructureError("runner result retries must be a non-negative integer")
 
     latency = _optional_number(result, "latency_seconds")
     if latency is None:
@@ -314,9 +284,7 @@ def run_experiment_pair(
     }
     duplicate_sources = expected_source_ids & feedback.source_ids
     if duplicate_sources:
-        raise ExperimentRunnerError(
-            "Benchmark source ID already exists: " + ", ".join(sorted(duplicate_sources))
-        )
+        raise ExperimentRunnerError("Benchmark source ID already exists: " + ", ".join(sorted(duplicate_sources)))
 
     staged: dict[str, UsageRecord] = {}
     for side in run_order:
@@ -364,17 +332,13 @@ def command_executor(argv: Sequence[str], timeout_seconds: float) -> RunnerExecu
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RunnerInfrastructureError(
-                f"runner timed out after {timeout_seconds:g} seconds"
-            ) from exc
+            raise RunnerInfrastructureError(f"runner timed out after {timeout_seconds:g} seconds") from exc
         except OSError as exc:
             raise RunnerInfrastructureError(f"runner could not start: {exc}") from exc
 
         elapsed = max(0.000001, time.monotonic() - started)
         if completed.returncode != 0:
-            raise RunnerInfrastructureError(
-                f"runner exited with code {completed.returncode}; no model evidence was recorded"
-            )
+            raise RunnerInfrastructureError(f"runner exited with code {completed.returncode}; no model evidence was recorded")
         lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
         if not lines:
             raise RunnerInfrastructureError("runner returned no JSON result")
@@ -403,12 +367,8 @@ def append_pair_feedback(path: str | Path, report: PairRunReport) -> None:
     source_ids = {record.source_id for record in report.records if record.source_id}
     duplicates = source_ids & existing.source_ids
     if duplicates:
-        raise ExperimentRunnerError(
-            "Benchmark source ID appeared before append: " + ", ".join(sorted(duplicates))
-        )
-    payload = "".join(
-        json.dumps(record.as_dict(), ensure_ascii=False) + "\n" for record in report.records
-    )
+        raise ExperimentRunnerError("Benchmark source ID appeared before append: " + ", ".join(sorted(duplicates)))
+    payload = "".join(json.dumps(record.as_dict(), ensure_ascii=False) + "\n" for record in report.records)
     with target.open("a", encoding="utf-8") as handle:
         handle.write(payload)
 
@@ -432,8 +392,7 @@ def experiment_run_markdown(report: PairRunReport, *, applied: bool) -> str:
         latency = f"{record.latency_seconds:.3f}s" if record.latency_seconds is not None else "—"
         cost = f"${record.cost_usd:.6f}" if record.cost_usd is not None else "—"
         lines.append(
-            f"| {side} | `{record.model_id}` | {record.effort} | {record.execution_mode} | "
-            f"{record.outcome} | {record.retries} | {latency} | {cost} |"
+            f"| {side} | `{record.model_id}` | {record.effort} | {record.execution_mode} | {record.outcome} | {record.retries} | {latency} | {cost} |"
         )
     lines.extend(
         [

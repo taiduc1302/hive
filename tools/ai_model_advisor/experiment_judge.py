@@ -35,14 +35,10 @@ def validate_judge_result(result: dict[str, Any]) -> tuple[str, str]:
     if not isinstance(result, dict):
         raise RunnerInfrastructureError("judge result must be a JSON object")
     if result.get("schema_version") != _JUDGE_SCHEMA_VERSION:
-        raise RunnerInfrastructureError(
-            f"judge result schema_version must be {_JUDGE_SCHEMA_VERSION}"
-        )
+        raise RunnerInfrastructureError(f"judge result schema_version must be {_JUDGE_SCHEMA_VERSION}")
     outcome = result.get("outcome")
     if outcome not in _VALID_OUTCOMES:
-        raise RunnerInfrastructureError(
-            "judge result outcome must be success, partial, or failure"
-        )
+        raise RunnerInfrastructureError("judge result outcome must be success, partial, or failure")
     note = result.get("note")
     if note is not None and not isinstance(note, str):
         raise RunnerInfrastructureError("judge result note must be a string when provided")
@@ -88,16 +84,12 @@ def command_judge(argv: Sequence[str], timeout_seconds: float) -> OutcomeJudge:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RunnerInfrastructureError(
-                f"judge timed out after {timeout_seconds:g} seconds"
-            ) from exc
+            raise RunnerInfrastructureError(f"judge timed out after {timeout_seconds:g} seconds") from exc
         except OSError as exc:
             raise RunnerInfrastructureError(f"judge could not start: {exc}") from exc
 
         if completed.returncode != 0:
-            raise RunnerInfrastructureError(
-                f"judge exited with code {completed.returncode}; no model evidence was recorded"
-            )
+            raise RunnerInfrastructureError(f"judge exited with code {completed.returncode}; no model evidence was recorded")
         lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
         if not lines:
             raise RunnerInfrastructureError("judge returned no JSON result")

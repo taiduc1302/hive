@@ -162,9 +162,7 @@ def build_capability_report(
             "benchmark evidence should identify the installed runtime version."
         )
     if not wire_capture:
-        warnings.append(
-            "Hive post-transform request capture is unavailable; explicit model/effort proof is fail-closed."
-        )
+        warnings.append("Hive post-transform request capture is unavailable; explicit model/effort proof is fail-closed.")
     if not native_config.get("reasoning_effort_passthrough"):
         warnings.append(
             "Native Hive configuration.json reasoning_effort passthrough is unavailable; "
@@ -195,9 +193,7 @@ def build_capability_report(
                 "status": "runtime_verified",
                 "proof": "post-transform provider request body",
                 "default_semantics": "omit explicit effort parameter",
-                "native_hive_config_passthrough": bool(
-                    native_config.get("reasoning_effort_passthrough")
-                ),
+                "native_hive_config_passthrough": bool(native_config.get("reasoning_effort_passthrough")),
                 "config_keys": native_config.get("config_keys", []),
             },
             "execution_modes": {
