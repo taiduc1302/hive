@@ -78,6 +78,7 @@ def _canary_is_consistent(item: dict[str, Any]) -> bool:
         item.get("state") == "eligible_for_manual_promotion"
         and item.get("safe_to_apply") is False
         and item.get("requires_human_approval") is True
+        and required_pairs >= 3
         and matched_pairs >= required_pairs
         and item.get("leaderboard_status") == "promote"
         and item.get("winner_matches_candidate") is True
