@@ -18,6 +18,8 @@ on:
       - "docs/AI_MODEL_ADVISOR_PROMOTION_PLANS.md"
       - "docs/AI_MODEL_ADVISOR_PROMOTION_REVIEW.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
+      - "core/framework/config.py"
+      - "core/tests/test_config.py"
       - ".github/workflows/ai-model-advisor.yml"
   schedule:
     # 07:05 America/Vancouver during PDT. GitHub cron uses UTC.
@@ -39,8 +41,8 @@ jobs:
       - name: Install validation dependencies
         run: python -m pip install pytest ruff
 
-      - name: Lint advisor files
-        run: ruff check tools/ai_model_advisor tests/test_ai_model_advisor*.py
+      - name: Lint advisor and Hive adapter files
+        run: ruff check tools/ai_model_advisor tests/test_ai_model_advisor*.py core/framework/config.py core/tests/test_config.py
 
       - name: Run advisor tests
         run: python -m pytest tests/test_ai_model_advisor*.py
