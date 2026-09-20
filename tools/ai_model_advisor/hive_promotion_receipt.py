@@ -1,1 +1,353 @@
-from __future__ import annotations\n\nimport argparse\nimport hashlib\nimport json\nfrom pathlib import Path\nfrom typing import Any\n\n\nclass HivePromotionReceiptError(ValueError):\n    """Raised when a Hive promotion preview or config cannot be verified."""\n\n\ndef _canonical_sha256(value: Any) -> str:\n    payload = json.dumps(\n        value,\n        ensure_ascii=False,\n        sort_keys=True,\n        separators=(",", ":"),\n    ).encode("utf-8")\n    return hashlib.sha256(payload).hexdigest()\n\n\ndef _required_string(mapping: dict[str, Any], key: str, *, label: str) -> str:\n    value = mapping.get(key)\n    if not isinstance(value, str) or not value.strip():\n        raise HivePromotionReceiptError(f"{label} must contain non-empty {key}")\n    return value.strip()\n\n\ndef _selected_config(preview: dict[str, Any], key: str) -> dict[str, str]:\n    transition = preview.get("selected_transition")\n    if not isinstance(transition, dict):\n        raise HivePromotionReceiptError("promotion preview must contain selected_transition")\n    config = transition.get(key)\n    if not isinstance(config, dict):\n        raise HivePromotionReceiptError(f"selected_transition must contain {key}")\n    provider = _required_string(config, "provider", label=key)\n    model_id = _required_string(config, "model_id", label=key)\n    effort = _required_string(config, "effort", label=key)\n    execution_mode = _required_string(config, "execution_mode", label=key)\n    return {\n        "provider": provider,\n        "model_id": model_id,\n        "effort": effort,\n        "execution_mode": execution_mode,\n    }\n\n\ndef _expected_sections(preview: dict[str, Any]) -> list[str]:\n    preconditions = preview.get("preconditions")\n    if not isinstance(preconditions, dict):\n        raise HivePromotionReceiptError("promotion preview must contain preconditions")\n    raw = preconditions.get("sections_to_verify")\n    if not isinstance(raw, list) or not raw:\n        raise HivePromotionReceiptError(\n            "preconditions.sections_to_verify must be a non-empty list"\n        )\n    sections: list[str] = []\n    for item in raw:\n        if item not in {"llm", "worker_llm"}:\n            raise HivePromotionReceiptError(f"unsupported Hive config section: {item!r}")\n        if item not in sections:\n            sections.append(item)\n    return sections\n\n\ndef _validate_preview(\n    preview: dict[str, Any],\n) -> tuple[dict[str, str], dict[str, str], list[str]]:\n    if preview.get("schema_version") != 1:\n        raise HivePromotionReceiptError("promotion preview schema_version must be 1")\n    if preview.get("host") != "hive":\n        raise HivePromotionReceiptError("promotion preview host must be hive")\n    if preview.get("state") != "ready_for_manual_hive_edit":\n        raise HivePromotionReceiptError("promotion preview is not ready_for_manual_hive_edit")\n    if preview.get("safe_to_auto_apply") is not False:\n        raise HivePromotionReceiptError("promotion preview must keep safe_to_auto_apply=false")\n    if preview.get("automatic_config_mutation") is not False:\n        raise HivePromotionReceiptError(\n            "promotion preview must keep automatic_config_mutation=false"\n        )\n    if preview.get("requires_human_approval") is not True:\n        raise HivePromotionReceiptError("promotion preview must require human approval")\n    if not isinstance(preview.get("apply_patch"), dict):\n        raise HivePromotionReceiptError("promotion preview must contain apply_patch")\n    if not isinstance(preview.get("rollback_patch"), dict):\n        raise HivePromotionReceiptError("promotion preview must contain rollback_patch")\n\n    before = _selected_config(preview, "before")\n    after = _selected_config(preview, "after")\n    rollback = _selected_config(preview, "rollback_to")\n    if rollback != before:\n        raise HivePromotionReceiptError("rollback_to must exactly match before")\n    if len({before["provider"], after["provider"]}) != 1:\n        raise HivePromotionReceiptError(\n            "receipt verification does not support provider changes"\n        )\n    if any(config["execution_mode"] != "single" for config in (before, after)):\n        raise HivePromotionReceiptError(\n            "receipt verification supports execution_mode=single only"\n        )\n\n    sections = _expected_sections(preview)\n    return before, after, sections\n\n\ndef _normalized_section(section: Any) -> dict[str, Any]:\n    if not isinstance(section, dict):\n        return {\n            "exists": False,\n            "provider": None,\n            "model": None,\n            "reasoning_effort": "default",\n            "reasoning_effort_key_present": False,\n        }\n    effort_present = "reasoning_effort" in section\n    raw_effort = section.get("reasoning_effort")\n    effort = "default" if not effort_present else raw_effort\n    return {\n        "exists": True,\n        "provider": section.get("provider"),\n        "model": section.get("model"),\n        "reasoning_effort": effort,\n        "reasoning_effort_key_present": effort_present,\n    }\n\n\ndef _target_matches(\n    actual: dict[str, Any], expected: dict[str, str]\n) -> tuple[bool, list[str]]:\n    diffs: list[str] = []\n    if actual['provider'] != expected['provider']:\n        diffs.append(\n            f"provider expected {expected[\"provider\"]!r}, found {actual[\"provider\"]!r}"\n        )\n    if actual['model'] != expected['model_id']:\n        diffs.append(\n            f"model expected {expected[\"model_id\"]!r}, found {actual[\"model\"]!r}"\n        )\n\n    expected_effort = expected["effort"]\n    if expected_effort == "default":\n        if actual["reasoning_effort_key_present"]:\n            diffs.append("reasoning_effort should be absent to restore provider default")\n    elif actual['reasoning_effort'] != expected_effort:\n        diffs.append(\n            f"reasoning_effort expected {expected_effort!r}, "\n            f"found {actual[\"reasoning_effort\"]!r}"\n        )\n    return not diffs, diffs\n\n\ndef build_hive_promotion_receipt(\n    preview: dict[str, Any],\n    current_config: dict[str, Any],\n) -> dict[str, Any]:\n    """Verify a manually edited Hive config against a reviewed promotion preview.\n\n    This function never mutates current_config. It emits only non-secret\n    provider/model/effort observations plus hashes of the full inputs.\n    """\n    if not isinstance(preview, dict):\n        raise HivePromotionReceiptError("promotion preview must be a JSON object")\n    if not isinstance(current_config, dict):\n        raise HivePromotionReceiptError("Hive configuration must be a JSON object")\n\n    try:\n        before, after, sections = _validate_preview(preview)\n    except HivePromotionReceiptError as exc:\n        return {\n            "schema_version": 1,\n            "host": "hive",\n            "state": "blocked_invalid_preview",\n            "reason": str(exc),\n            "safe_to_auto_mutate": False,\n            "automatic_config_mutation": False,\n            "verified_change_id": preview.get("change_id"),\n            "preview_sha256": _canonical_sha256(preview),\n            "current_config_sha256": _canonical_sha256(current_config),\n            "sections": [],\n        }\n\n    observations: list[dict[str, Any]] = []\n    after_matches = 0\n    before_matches = 0\n    for section_name in sections:\n        actual = _normalized_section(current_config.get(section_name))\n        matches_after, after_diffs = _target_matches(actual, after)\n        matches_before, before_diffs = _target_matches(actual, before)\n        if matches_after:\n            section_state = "after"\n            after_matches += 1\n        elif matches_before:\n            section_state = "before"\n            before_matches += 1\n        else:\n            section_state = "drifted"\n\n        observations.append(\n            {\n                "section": section_name,\n                "state": section_state,\n                "actual": {\n                    "provider": actual['provider'],\n                    "model": actual['model'],\n                    "reasoning_effort": actual['reasoning_effort'],\n                    "reasoning_effort_key_present": actual[\n                        "reasoning_effort_key_present"\n                    ],\n                },\n                "after_differences": after_diffs,\n                "before_differences": before_diffs,\n            }\n        )\n\n    if after_matches == len(sections):\n        state = "applied_exactly"\n        reason = (\n            "Every reviewed Hive section exactly matches the approved after configuration."\n        )\n    elif before_matches == len(sections):\n        state = "not_applied"\n        reason = (\n            "Every reviewed Hive section still matches the approved before configuration."\n        )\n    else:\n        state = "drifted"\n        reason = (\n            "Hive configuration does not exactly match either the complete reviewed before "\n            "state or the complete reviewed after state."\n        )\n\n    preview_sha = _canonical_sha256(preview)\n    config_sha = _canonical_sha256(current_config)\n    receipt_material = {\n        "change_id": preview.get("change_id"),\n        "category": preview.get("category"),\n        "scope": preview.get("scope"),\n        "preview_sha256": preview_sha,\n        "current_config_sha256": config_sha,\n        "state": state,\n        "sections": observations,\n    }\n\n    return {\n        "schema_version": 1,\n        "host": "hive",\n        "state": state,\n        "reason": reason,\n        "category": preview.get("category"),\n        "scope": preview.get("scope"),\n        "verified_change_id": preview.get("change_id"),\n        "safe_to_auto_mutate": False,\n        "automatic_config_mutation": False,\n        "requires_human_review": True,\n        "preview_sha256": preview_sha,\n        "current_config_sha256": config_sha,\n        "receipt_sha256": _canonical_sha256(receipt_material),\n        "expected_before": before,\n        "expected_after": after,\n        "sections": observations,\n        "privacy": (\n            "Receipt excludes credentials, API keys, API bases, and unrelated Hive config. "\n            "Only provider/model/reasoning-effort observations are emitted."\n        ),\n    }\n\n\ndef render_markdown(receipt: dict[str, Any]) -> str:\n    lines = [\n        "# Hive Promotion Verification Receipt",\n        "",\n        f"- State: **{receipt[\"state\"]}**",\n        f"- Category: **{receipt.get(\"category\") or \"—\"}**",\n        f"- Scope: **{receipt.get(\"scope\") or \"—\"}**",\n        f"- Change ID: `{receipt.get(\"verified_change_id\") or \"—\"}`",\n        "- Automatic config mutation: **disabled**",\n        "",\n        receipt["reason"],\n        "",\n        f"- Preview SHA-256: `{receipt[\"preview_sha256\"]}`",\n        f"- Hive config SHA-256: `{receipt[\"current_config_sha256\"]}`",\n    ]\n    if receipt.get("receipt_sha256"):\n        lines.append(f"- Receipt SHA-256: `{receipt[\"receipt_sha256\"]}`")\n\n    sections = receipt.get("sections")\n    if isinstance(sections, list) and sections:\n        lines.extend(["", "## Verified sections", ""])\n        for item in sections:\n            lines.append(f"### {item[\"section\"]}")\n            lines.append(f"- State: **{item[\"state\"]}**")\n            actual = item.get("actual", {})\n            lines.append(f"- Provider: `{actual.get(\"provider\")}`")\n            lines.append(f"- Model: `{actual.get(\"model\")}`")\n            lines.append(\n                f"- Reasoning effort: `{actual.get(\"reasoning_effort\")}`"\n            )\n            differences = item.get("after_differences") or []\n            if differences:\n                lines.append("- Differences from approved after state:")\n                lines.extend(f"  - {difference}" for difference in differences)\n\n    lines.extend(\n        [\n            "",\n            "This receipt is verification-only. It does not modify Hive configuration.",\n        ]\n    )\n    return "\n".join(lines) + "\n"\n\n\ndef _load_json_object(path: str | Path, label: str) -> dict[str, Any]:\n    payload = json.loads(Path(path).read_text(encoding="utf-8"))\n    if not isinstance(payload, dict):\n        raise HivePromotionReceiptError(f"{label} must be a JSON object")\n    return payload\n\n\ndef main(argv: list[str] | None = None) -> int:\n    parser = argparse.ArgumentParser(\n        description=(\n            "Verify a manually applied Hive promotion against the reviewed "\n            "non-mutating promotion preview."\n        )\n    )\n    parser.add_argument("--promotion-preview", required=True)\n    parser.add_argument("--hive-config", required=True)\n    parser.add_argument("--json", action="store_true")\n    parser.add_argument("--output")\n    args = parser.parse_args(argv)\n\n    receipt = build_hive_promotion_receipt(\n        _load_json_object(args.promotion_preview, "promotion preview"),\n        _load_json_object(args.hive_config, "Hive configuration"),\n    )\n    text = (\n        json.dumps(receipt, indent=2, ensure_ascii=False) + "\n"\n        if args.json\n        else render_markdown(receipt)\n    )\n    if args.output:\n        target = Path(args.output)\n        target.parent.mkdir(parents=True, exist_ok=True)\n        target.write_text(text, encoding="utf-8")\n    else:\n        print(text, end="")\n    return 0\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
+
+
+class HivePromotionReceiptError(ValueError):
+    """Raised when a Hive promotion preview or config cannot be verified."""
+
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _required_string(mapping: dict[str, Any], key: str, *, label: str) -> str:
+    value = mapping.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise HivePromotionReceiptError(f"{label} must contain non-empty {key}")
+    return value.strip()
+
+
+def _selected_config(preview: dict[str, Any], key: str) -> dict[str, str]:
+    transition = preview.get("selected_transition")
+    if not isinstance(transition, dict):
+        raise HivePromotionReceiptError("promotion preview must contain selected_transition")
+    config = transition.get(key)
+    if not isinstance(config, dict):
+        raise HivePromotionReceiptError(f"selected_transition must contain {key}")
+    return {
+        "provider": _required_string(config, "provider", label=key),
+        "model_id": _required_string(config, "model_id", label=key),
+        "effort": _required_string(config, "effort", label=key),
+        "execution_mode": _required_string(config, "execution_mode", label=key),
+    }
+
+
+def _expected_sections(preview: dict[str, Any]) -> list[str]:
+    preconditions = preview.get("preconditions")
+    if not isinstance(preconditions, dict):
+        raise HivePromotionReceiptError("promotion preview must contain preconditions")
+    raw = preconditions.get("sections_to_verify")
+    if not isinstance(raw, list) or not raw:
+        raise HivePromotionReceiptError(
+            "preconditions.sections_to_verify must be a non-empty list"
+        )
+    sections: list[str] = []
+    for item in raw:
+        if item not in {"llm", "worker_llm"}:
+            raise HivePromotionReceiptError(f"unsupported Hive config section: {item!r}")
+        if item not in sections:
+            sections.append(item)
+    return sections
+
+
+def _validate_preview(
+    preview: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str], list[str]]:
+    if preview.get("schema_version") != 1:
+        raise HivePromotionReceiptError("promotion preview schema_version must be 1")
+    if preview.get("host") != "hive":
+        raise HivePromotionReceiptError("promotion preview host must be hive")
+    if preview.get("state") != "ready_for_manual_hive_edit":
+        raise HivePromotionReceiptError("promotion preview is not ready_for_manual_hive_edit")
+    if preview.get("safe_to_auto_apply") is not False:
+        raise HivePromotionReceiptError("promotion preview must keep safe_to_auto_apply=false")
+    if preview.get("automatic_config_mutation") is not False:
+        raise HivePromotionReceiptError(
+            "promotion preview must keep automatic_config_mutation=false"
+        )
+    if preview.get("requires_human_approval") is not True:
+        raise HivePromotionReceiptError("promotion preview must require human approval")
+    if not isinstance(preview.get("apply_patch"), dict):
+        raise HivePromotionReceiptError("promotion preview must contain apply_patch")
+    if not isinstance(preview.get("rollback_patch"), dict):
+        raise HivePromotionReceiptError("promotion preview must contain rollback_patch")
+
+    before = _selected_config(preview, "before")
+    after = _selected_config(preview, "after")
+    rollback = _selected_config(preview, "rollback_to")
+
+    if rollback != before:
+        raise HivePromotionReceiptError("rollback_to must exactly match before")
+    if before["provider"] != after["provider"]:
+        raise HivePromotionReceiptError(
+            "receipt verification does not support provider changes"
+        )
+    if before["execution_mode"] != "single" or after["execution_mode"] != "single":
+        raise HivePromotionReceiptError(
+            "receipt verification supports execution_mode=single only"
+        )
+
+    return before, after, _expected_sections(preview)
+
+
+def _normalized_section(section: Any) -> dict[str, Any]:
+    if not isinstance(section, dict):
+        return {
+            "provider": None,
+            "model": None,
+            "reasoning_effort": "default",
+            "reasoning_effort_key_present": False,
+        }
+    effort_present = "reasoning_effort" in section
+    return {
+        "provider": section.get("provider"),
+        "model": section.get("model"),
+        "reasoning_effort": section.get("reasoning_effort") if effort_present else "default",
+        "reasoning_effort_key_present": effort_present,
+    }
+
+
+def _target_matches(
+    actual: dict[str, Any],
+    expected: dict[str, str],
+) -> tuple[bool, list[str]]:
+    diffs: list[str] = []
+
+    if actual["provider"] != expected["provider"]:
+        diffs.append(
+            f"provider expected {expected['provider']!r}, found {actual['provider']!r}"
+        )
+    if actual["model"] != expected["model_id"]:
+        diffs.append(
+            f"model expected {expected['model_id']!r}, found {actual['model']!r}"
+        )
+
+    expected_effort = expected["effort"]
+    if expected_effort == "default":
+        if actual["reasoning_effort_key_present"]:
+            diffs.append("reasoning_effort should be absent to restore provider default")
+    elif actual["reasoning_effort"] != expected_effort:
+        diffs.append(
+            f"reasoning_effort expected {expected_effort!r}, "
+            f"found {actual['reasoning_effort']!r}"
+        )
+
+    return not diffs, diffs
+
+
+def build_hive_promotion_receipt(
+    preview: dict[str, Any],
+    current_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Verify current Hive config against a reviewed promotion preview.
+
+    The verifier is read-only and emits only non-secret route observations.
+    """
+    if not isinstance(preview, dict):
+        raise HivePromotionReceiptError("promotion preview must be a JSON object")
+    if not isinstance(current_config, dict):
+        raise HivePromotionReceiptError("Hive configuration must be a JSON object")
+
+    preview_sha = _canonical_sha256(preview)
+    config_sha = _canonical_sha256(current_config)
+
+    try:
+        before, after, sections = _validate_preview(preview)
+    except HivePromotionReceiptError as exc:
+        return {
+            "schema_version": 1,
+            "host": "hive",
+            "state": "blocked_invalid_preview",
+            "reason": str(exc),
+            "safe_to_auto_mutate": False,
+            "automatic_config_mutation": False,
+            "verified_change_id": preview.get("change_id"),
+            "preview_sha256": preview_sha,
+            "current_config_sha256": config_sha,
+            "sections": [],
+        }
+
+    observations: list[dict[str, Any]] = []
+    after_matches = 0
+    before_matches = 0
+
+    for section_name in sections:
+        actual = _normalized_section(current_config.get(section_name))
+        matches_after, after_diffs = _target_matches(actual, after)
+        matches_before, before_diffs = _target_matches(actual, before)
+
+        if matches_after:
+            section_state = "after"
+            after_matches += 1
+        elif matches_before:
+            section_state = "before"
+            before_matches += 1
+        else:
+            section_state = "drifted"
+
+        observations.append(
+            {
+                "section": section_name,
+                "state": section_state,
+                "actual": {
+                    "provider": actual["provider"],
+                    "model": actual["model"],
+                    "reasoning_effort": actual["reasoning_effort"],
+                    "reasoning_effort_key_present": actual[
+                        "reasoning_effort_key_present"
+                    ],
+                },
+                "after_differences": after_diffs,
+                "before_differences": before_diffs,
+            }
+        )
+
+    if after_matches == len(sections):
+        state = "applied_exactly"
+        reason = (
+            "Every reviewed Hive section exactly matches the approved after configuration."
+        )
+    elif before_matches == len(sections):
+        state = "not_applied"
+        reason = (
+            "Every reviewed Hive section still matches the approved before configuration."
+        )
+    else:
+        state = "drifted"
+        reason = (
+            "Hive configuration does not exactly match either the complete reviewed before "
+            "state or the complete reviewed after state."
+        )
+
+    receipt_material = {
+        "change_id": preview.get("change_id"),
+        "category": preview.get("category"),
+        "scope": preview.get("scope"),
+        "preview_sha256": preview_sha,
+        "current_config_sha256": config_sha,
+        "state": state,
+        "sections": observations,
+    }
+
+    return {
+        "schema_version": 1,
+        "host": "hive",
+        "state": state,
+        "reason": reason,
+        "category": preview.get("category"),
+        "scope": preview.get("scope"),
+        "verified_change_id": preview.get("change_id"),
+        "safe_to_auto_mutate": False,
+        "automatic_config_mutation": False,
+        "requires_human_review": True,
+        "preview_sha256": preview_sha,
+        "current_config_sha256": config_sha,
+        "receipt_sha256": _canonical_sha256(receipt_material),
+        "expected_before": before,
+        "expected_after": after,
+        "sections": observations,
+        "privacy": (
+            "Receipt excludes credentials, API keys, API bases, and unrelated Hive config. "
+            "Only provider/model/reasoning-effort observations are emitted."
+        ),
+    }
+
+
+def render_markdown(receipt: dict[str, Any]) -> str:
+    lines = [
+        "# Hive Promotion Verification Receipt",
+        "",
+        f"- State: **{receipt['state']}**",
+        f"- Category: **{receipt.get('category') or '—'}**",
+        f"- Scope: **{receipt.get('scope') or '—'}**",
+        f"- Change ID: `{receipt.get('verified_change_id') or '—'}`",
+        "- Automatic config mutation: **disabled**",
+        "",
+        receipt["reason"],
+        "",
+        f"- Preview SHA-256: `{receipt['preview_sha256']}`",
+        f"- Hive config SHA-256: `{receipt['current_config_sha256']}`",
+    ]
+
+    if receipt.get("receipt_sha256"):
+        lines.append(f"- Receipt SHA-256: `{receipt['receipt_sha256']}`")
+
+    sections = receipt.get("sections")
+    if isinstance(sections, list) and sections:
+        lines.extend(["", "## Verified sections", ""])
+        for item in sections:
+            lines.append(f"### {item['section']}")
+            lines.append(f"- State: **{item['state']}**")
+            actual = item.get("actual", {})
+            lines.append(f"- Provider: `{actual.get('provider')}`")
+            lines.append(f"- Model: `{actual.get('model')}`")
+            lines.append(
+                f"- Reasoning effort: `{actual.get('reasoning_effort')}`"
+            )
+            differences = item.get("after_differences") or []
+            if differences:
+                lines.append("- Differences from approved after state:")
+                lines.extend(f"  - {difference}" for difference in differences)
+
+    lines.extend(
+        [
+            "",
+            "This receipt is verification-only. It does not modify Hive configuration.",
+        ]
+    )
+    return chr(10).join(lines) + chr(10)
+
+
+def _load_json_object(path: str | Path, label: str) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise HivePromotionReceiptError(f"{label} must be a JSON object")
+    return payload
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verify a manually applied Hive promotion against the reviewed "
+            "non-mutating promotion preview."
+        )
+    )
+    parser.add_argument("--promotion-preview", required=True)
+    parser.add_argument("--hive-config", required=True)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--output")
+    args = parser.parse_args(argv)
+
+    receipt = build_hive_promotion_receipt(
+        _load_json_object(args.promotion_preview, "promotion preview"),
+        _load_json_object(args.hive_config, "Hive configuration"),
+    )
+    text = (
+        json.dumps(receipt, indent=2, ensure_ascii=False) + chr(10)
+        if args.json
+        else render_markdown(receipt)
+    )
+
+    if args.output:
+        target = Path(args.output)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    else:
+        print(text, end="")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
