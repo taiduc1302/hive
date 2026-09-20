@@ -447,7 +447,12 @@ def get_worker_api_base() -> str | None:
 
 
 def get_worker_llm_extra_kwargs() -> dict[str, Any]:
-    """Return extra kwargs for the worker LLM provider."""
+    """Return extra kwargs for the worker LLM provider.
+
+    reasoning_effort is an opt-in passthrough to LiteLLM. Hive does not
+    translate or downgrade the value: provider/model compatibility remains
+    LiteLLM's responsibility and unsupported combinations should fail loudly.
+    """
     worker_llm = get_hive_config().get("worker_llm", {})
     if not worker_llm:
         return get_llm_extra_kwargs()
@@ -455,9 +460,12 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
     if worker_llm.get("use_claude_code_subscription"):
         api_key = get_worker_api_key()
         if api_key:
-            return {
-                "extra_headers": {"authorization": f"Bearer {api_key}"},
-            }
+            return _with_reasoning_effort(
+                worker_llm,
+                {
+                    "extra_headers": {"authorization": f"Bearer {api_key}"},
+                },
+            )
     if worker_llm.get("use_codex_subscription"):
         api_key = get_worker_api_key()
         if api_key:
@@ -473,14 +481,21 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
                     headers["ChatGPT-Account-Id"] = account_id
             except ImportError:
                 pass
-            return {
-                "extra_headers": headers,
-                "store": False,
-                "allowed_openai_params": ["store"],
-            }
+            return _with_reasoning_effort(
+                worker_llm,
+                {
+                    "extra_headers": headers,
+                    "store": False,
+                    "allowed_openai_params": ["store"],
+                },
+            )
     if worker_llm.get("provider") == "ollama":
-        return {"num_ctx": worker_llm.get("num_ctx", 16384)}
-    return {}
+        return _with_reasoning_effort(
+            worker_llm,
+            {"num_ctx": worker_llm.get("num_ctx", 16384)},
+        )
+
+    return _with_reasoning_effort(worker_llm, {})
 
 
 DEFAULT_MAX_CONTEXT_TOKENS = 32_000
@@ -932,24 +947,53 @@ def get_api_base() -> str | None:
     return None
 
 
+def _with_reasoning_effort(
+    llm_section: dict[str, Any],
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge an explicit reasoning_effort config value into provider kwargs.
+
+    The field is intentionally provider-agnostic. Hive only forwards it to
+    LiteLLM; it does not claim that every model supports every effort level.
+    Invalid local configuration is rejected instead of silently dropping the
+    requested control.
+    """
+    if "reasoning_effort" not in llm_section:
+        return kwargs
+
+    effort = llm_section["reasoning_effort"]
+    if not isinstance(effort, str) or not effort.strip():
+        raise ValueError("reasoning_effort must be a non-empty string")
+
+    merged = dict(kwargs)
+    merged["reasoning_effort"] = effort.strip()
+    return merged
+
+
 def get_llm_extra_kwargs() -> dict[str, Any]:
     """Return extra kwargs for LiteLLMProvider (e.g. OAuth headers).
 
-    When ``use_claude_code_subscription`` is enabled, returns
-    ``extra_headers`` with the OAuth Bearer token so that litellm's
-    built-in Anthropic OAuth handler adds the required beta headers.
+    reasoning_effort is an opt-in passthrough. Hive deliberately does not
+    normalize provider-specific effort ladders; LiteLLM/provider validation is
+    authoritative for the selected model.
 
-    When ``use_codex_subscription`` is enabled, returns
-    ``extra_headers`` with the Bearer token, ``ChatGPT-Account-Id``,
-    and ``store=False`` (required by the ChatGPT backend).
+    When use_claude_code_subscription is enabled, returns extra_headers with
+    the OAuth Bearer token so that LiteLLM's built-in Anthropic OAuth handler
+    adds the required beta headers.
+
+    When use_codex_subscription is enabled, returns extra_headers with the
+    Bearer token, ChatGPT-Account-Id, and store=False.
     """
     llm = get_hive_config().get("llm", {})
     if llm.get("use_claude_code_subscription"):
         api_key = get_api_key()
         if api_key:
-            return {
-                "extra_headers": {"authorization": f"Bearer {api_key}"},
-            }
+            return _with_reasoning_effort(
+                llm,
+                {
+                    "extra_headers": {"authorization": f"Bearer {api_key}"},
+                },
+            )
     if llm.get("use_codex_subscription"):
         api_key = get_api_key()
         if api_key:
@@ -965,25 +1009,25 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
                     headers["ChatGPT-Account-Id"] = account_id
             except ImportError:
                 pass
-            return {
-                "extra_headers": headers,
-                "store": False,
-                "allowed_openai_params": ["store"],
-            }
+            return _with_reasoning_effort(
+                llm,
+                {
+                    "extra_headers": headers,
+                    "store": False,
+                    "allowed_openai_params": ["store"],
+                },
+            )
     if llm.get("provider") == "ollama":
-        # Pass num_ctx to Ollama so it doesn't silently truncate the ~9.5k Queen prompt.
-        # Ollama's default num_ctx is only 2048. We set it to 16384 here so LiteLLM
-        # passes it through as a provider-specific option.
-        return {"num_ctx": llm.get("num_ctx", 16384)}
-    # Generic passthrough: let configuration.json forward a raw ``extra_body``
-    # to LiteLLM/the OpenAI SDK (e.g. vLLM's ``chat_template_kwargs`` to disable
-    # a model's default thinking). Applied to every LLM call, including the
-    # small recall/judge aux calls that otherwise burn their token budget on
-    # hidden reasoning and return empty.
+        return _with_reasoning_effort(
+            llm,
+            {"num_ctx": llm.get("num_ctx", 16384)},
+        )
+
     extra_body = llm.get("extra_body")
+    kwargs: dict[str, Any] = {}
     if isinstance(extra_body, dict) and extra_body:
-        return {"extra_body": extra_body}
-    return {}
+        kwargs["extra_body"] = extra_body
+    return _with_reasoning_effort(llm, kwargs)
 
 
 # ---------------------------------------------------------------------------
