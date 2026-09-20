@@ -49,6 +49,8 @@ Use live feedback readiness instead of trusting a potentially stale saved plan. 
 
 For promotion canaries, treat duplicate attempts for the same exact configuration and task ID as ambiguous evidence. Exclude them from matched-pair counts rather than choosing the last attempt or averaging retries. Also surface one-sided task IDs as incomplete evidence before considering manual promotion.
 
+After a promotion review reaches `ready_for_manual_edit`, use `hive-promotion-preview` before any Hive config edit. Treat it as non-mutating review output only. It may produce apply/rollback patches only for same-provider `execution_mode=single` transitions; cross-provider or orchestration changes must remain blocked until the host can prove those controls. Never turn `safe_to_auto_apply=false` into an automatic edit.
+
 ## 7. Return an actionable recommendation
 
 Use `references/output-pattern.md`. Give one primary configuration, one cheaper/faster fallback, one escalation configuration only if justified, and the exact trigger to switch between them. Include confidence and availability caveats. Cite official sources when current web data was used.
