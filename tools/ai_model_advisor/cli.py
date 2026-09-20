@@ -15,7 +15,7 @@ from .experiment_run_cli import main as experiment_run_main
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
-from .hive_trace import (
+from .hive_promotion_preview import (\n    build_hive_promotion_preview,\n    render_markdown as hive_promotion_preview_markdown,\n)\nfrom .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
     import_report_markdown,
@@ -318,6 +318,28 @@ def command_promotion_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_preview(args: argparse.Namespace) -> int:
+    report = json.loads(Path(args.promotion_review).read_text(encoding="utf-8"))
+    if not isinstance(report, dict):
+        raise ValueError("promotion review root must be a JSON object")
+    preview = build_hive_promotion_preview(
+        report,
+        category=args.category,
+        scope=args.scope,
+    )
+    markdown = hive_promotion_preview_markdown(preview)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(preview, ensure_ascii=False, indent=2) + "\n",
+        )
+    return 0
+
+
 def command_feedback_import_hive(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
     report = import_hive_trace(
@@ -540,6 +562,14 @@ def build_parser() -> argparse.ArgumentParser:
     promotion_review.add_argument("--output", help="Optional Markdown manual promotion review")
     promotion_review.add_argument("--json-output")
     promotion_review.set_defaults(func=command_promotion_review)
+
+    hive_promotion_preview = sub.add_parser("hive-promotion-preview")
+    hive_promotion_preview.add_argument("--promotion-review", required=True)
+    hive_promotion_preview.add_argument("--category", required=True)
+    hive_promotion_preview.add_argument("--scope", choices=["queen", "worker", "both"], default="queen")
+    hive_promotion_preview.add_argument("--output", help="Optional Markdown Hive promotion preview")
+    hive_promotion_preview.add_argument("--json-output")
+    hive_promotion_preview.set_defaults(func=command_hive_promotion_preview)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
