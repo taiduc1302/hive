@@ -147,3 +147,36 @@ def test_receipt_blocks_preview_that_is_not_review_only():
     assert receipt["state"] == "blocked_invalid_preview"
     assert receipt["sections"] == []
     assert receipt["automatic_config_mutation"] is False
+
+
+def test_receipt_requires_apply_patch_to_match_reviewed_after():
+    preview = _preview()
+    preview["apply_patch"]["llm"]["model"] = "different-model"
+
+    receipt = build_hive_promotion_receipt(preview, {})
+
+    assert receipt["state"] == "blocked_invalid_preview"
+    assert "apply_patch must exactly match" in receipt["reason"]
+
+
+def test_receipt_requires_rollback_patch_to_match_reviewed_before():
+    preview = _preview()
+    preview["rollback_patch"]["llm"]["reasoning_effort"] = "low"
+
+    receipt = build_hive_promotion_receipt(preview, {})
+
+    assert receipt["state"] == "blocked_invalid_preview"
+    assert "rollback_patch must exactly match" in receipt["reason"]
+
+
+def test_receipt_requires_patch_scope_to_match_reviewed_sections():
+    preview = _preview()
+    preview["apply_patch"]["worker_llm"] = {
+        "model": "gpt-6-astra",
+        "reasoning_effort": "high",
+    }
+
+    receipt = build_hive_promotion_receipt(preview, {})
+
+    assert receipt["state"] == "blocked_invalid_preview"
+    assert "apply_patch must exactly match" in receipt["reason"]
