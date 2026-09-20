@@ -82,7 +82,7 @@ class TestReasoningEffortConfig:
 
         assert get_worker_llm_extra_kwargs() == {"reasoning_effort": "low"}
 
-    @pytest.mark.parametrize("value", ["", "   ", 3, null])
+    @pytest.mark.parametrize("value", ["", "   ", 3, None])
     def test_invalid_reasoning_effort_is_rejected(self, tmp_path, monkeypatch, value):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
