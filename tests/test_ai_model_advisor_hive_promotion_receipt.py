@@ -1,1 +1,149 @@
-from __future__ import annotations\n\nfrom tools.ai_model_advisor.hive_promotion_receipt import (\n    build_hive_promotion_receipt,\n)\n\n\ndef _preview(scope: str = "queen") -> dict:\n    sections = ["llm"] if scope == "queen" else ["llm", "worker_llm"]\n    apply_patch = {\n        section: {"model": "gpt-6-astra", "reasoning_effort": "high"}\n        for section in sections\n    }\n    rollback_patch = {\n        section: {"model": "gpt-5.6-sol", "reasoning_effort": "medium"}\n        for section in sections\n    }\n    return {\n        "schema_version": 1,\n        "host": "hive",\n        "category": "debugging",\n        "scope": scope,\n        "change_id": "debugging:gpt56-to-astra",\n        "safe_to_auto_apply": False,\n        "automatic_config_mutation": False,\n        "requires_human_approval": True,\n        "state": "ready_for_manual_hive_edit",\n        "preconditions": {\n            "expected_provider": "openai",\n            "expected_current": {\n                "provider": "openai",\n                "model_id": "gpt-5.6-sol",\n                "effort": "medium",\n                "execution_mode": "single",\n            },\n            "sections_to_verify": sections,\n            "operator_must_verify_current_config": True,\n        },\n        "selected_transition": {\n            "before": {\n                "provider": "openai",\n                "model_id": "gpt-5.6-sol",\n                "effort": "medium",\n                "execution_mode": "single",\n            },\n            "after": {\n                "provider": "openai",\n                "model_id": "gpt-6-astra",\n                "effort": "high",\n                "execution_mode": "single",\n            },\n            "rollback_to": {\n                "provider": "openai",\n                "model_id": "gpt-5.6-sol",\n                "effort": "medium",\n                "execution_mode": "single",\n            },\n        },\n        "apply_patch": apply_patch,\n        "rollback_patch": rollback_patch,\n    }\n\n\ndef test_receipt_reports_exact_application_without_leaking_secrets():\n    config = {\n        "llm": {\n            "provider": "openai",\n            "model": "gpt-6-astra",\n            "reasoning_effort": "high",\n            "api_key": "TOP_SECRET_KEY",\n            "api_base": "https://secret-proxy.example/v1",\n        },\n        "unrelated": {"token": "ANOTHER_SECRET"},\n    }\n\n    receipt = build_hive_promotion_receipt(_preview(), config)\n\n    assert receipt["state"] == "applied_exactly"\n    assert receipt["sections"][0]["state"] == "after"\n    assert receipt["automatic_config_mutation"] is False\n    serialized = str(receipt)\n    assert "TOP_SECRET_KEY" not in serialized\n    assert "ANOTHER_SECRET" not in serialized\n    assert "secret-proxy" not in serialized\n    assert receipt["receipt_sha256"]\n\n\ndef test_receipt_reports_not_applied_when_before_state_is_unchanged():\n    config = {\n        "llm": {\n            "provider": "openai",\n            "model": "gpt-5.6-sol",\n            "reasoning_effort": "medium",\n        }\n    }\n\n    receipt = build_hive_promotion_receipt(_preview(), config)\n\n    assert receipt["state"] == "not_applied"\n    assert receipt["sections"][0]["state"] == "before"\n\n\ndef test_receipt_reports_drift_for_partial_both_scope_application():\n    config = {\n        "llm": {\n            "provider": "openai",\n            "model": "gpt-6-astra",\n            "reasoning_effort": "high",\n        },\n        "worker_llm": {\n            "provider": "openai",\n            "model": "gpt-5.6-sol",\n            "reasoning_effort": "medium",\n        },\n    }\n\n    receipt = build_hive_promotion_receipt(_preview("both"), config)\n\n    assert receipt["state"] == "drifted"\n    assert [item["state"] for item in receipt["sections"]] == ["after", "before"]\n\n\ndef test_receipt_requires_default_effort_key_to_be_removed():\n    preview = _preview()\n    preview["selected_transition"]["after"]["effort"] = "default"\n    preview["apply_patch"]["llm"]["reasoning_effort"] = None\n    config = {\n        "llm": {\n            "provider": "openai",\n            "model": "gpt-6-astra",\n            "reasoning_effort": None,\n        }\n    }\n\n    receipt = build_hive_promotion_receipt(preview, config)\n\n    assert receipt["state"] == "drifted"\n    assert "should be absent" in receipt["sections"][0]["after_differences"][0]\n\n\ndef test_receipt_blocks_preview_that_is_not_review_only():\n    preview = _preview()\n    preview["safe_to_auto_apply"] = True\n\n    receipt = build_hive_promotion_receipt(preview, {})\n\n    assert receipt["state"] == "blocked_invalid_preview"\n    assert receipt["sections"] == []\n    assert receipt["automatic_config_mutation"] is False\n
+from __future__ import annotations
+
+from tools.ai_model_advisor.hive_promotion_receipt import (
+    build_hive_promotion_receipt,
+)
+
+
+def _preview(scope: str = "queen") -> dict:
+    sections = ["llm"] if scope == "queen" else ["llm", "worker_llm"]
+    apply_patch = {
+        section: {"model": "gpt-6-astra", "reasoning_effort": "high"}
+        for section in sections
+    }
+    rollback_patch = {
+        section: {"model": "gpt-5.6-sol", "reasoning_effort": "medium"}
+        for section in sections
+    }
+    return {
+        "schema_version": 1,
+        "host": "hive",
+        "category": "debugging",
+        "scope": scope,
+        "change_id": "debugging:gpt56-to-astra",
+        "safe_to_auto_apply": False,
+        "automatic_config_mutation": False,
+        "requires_human_approval": True,
+        "state": "ready_for_manual_hive_edit",
+        "preconditions": {
+            "expected_provider": "openai",
+            "expected_current": {
+                "provider": "openai",
+                "model_id": "gpt-5.6-sol",
+                "effort": "medium",
+                "execution_mode": "single",
+            },
+            "sections_to_verify": sections,
+            "operator_must_verify_current_config": True,
+        },
+        "selected_transition": {
+            "before": {
+                "provider": "openai",
+                "model_id": "gpt-5.6-sol",
+                "effort": "medium",
+                "execution_mode": "single",
+            },
+            "after": {
+                "provider": "openai",
+                "model_id": "gpt-6-astra",
+                "effort": "high",
+                "execution_mode": "single",
+            },
+            "rollback_to": {
+                "provider": "openai",
+                "model_id": "gpt-5.6-sol",
+                "effort": "medium",
+                "execution_mode": "single",
+            },
+        },
+        "apply_patch": apply_patch,
+        "rollback_patch": rollback_patch,
+    }
+
+
+def test_receipt_reports_exact_application_without_leaking_secrets():
+    config = {
+        "llm": {
+            "provider": "openai",
+            "model": "gpt-6-astra",
+            "reasoning_effort": "high",
+            "api_key": "TOP_SECRET_KEY",
+            "api_base": "https://secret-proxy.example/v1",
+        },
+        "unrelated": {"token": "ANOTHER_SECRET"},
+    }
+
+    receipt = build_hive_promotion_receipt(_preview(), config)
+
+    assert receipt["state"] == "applied_exactly"
+    assert receipt["sections"][0]["state"] == "after"
+    assert receipt["automatic_config_mutation"] is False
+    serialized = str(receipt)
+    assert "TOP_SECRET_KEY" not in serialized
+    assert "ANOTHER_SECRET" not in serialized
+    assert "secret-proxy" not in serialized
+    assert receipt["receipt_sha256"]
+
+
+def test_receipt_reports_not_applied_when_before_state_is_unchanged():
+    config = {
+        "llm": {
+            "provider": "openai",
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "medium",
+        }
+    }
+
+    receipt = build_hive_promotion_receipt(_preview(), config)
+
+    assert receipt["state"] == "not_applied"
+    assert receipt["sections"][0]["state"] == "before"
+
+
+def test_receipt_reports_drift_for_partial_both_scope_application():
+    config = {
+        "llm": {
+            "provider": "openai",
+            "model": "gpt-6-astra",
+            "reasoning_effort": "high",
+        },
+        "worker_llm": {
+            "provider": "openai",
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "medium",
+        },
+    }
+
+    receipt = build_hive_promotion_receipt(_preview("both"), config)
+
+    assert receipt["state"] == "drifted"
+    assert [item["state"] for item in receipt["sections"]] == ["after", "before"]
+
+
+def test_receipt_requires_default_effort_key_to_be_removed():
+    preview = _preview()
+    preview["selected_transition"]["after"]["effort"] = "default"
+    preview["apply_patch"]["llm"]["reasoning_effort"] = None
+    config = {
+        "llm": {
+            "provider": "openai",
+            "model": "gpt-6-astra",
+            "reasoning_effort": None,
+        }
+    }
+
+    receipt = build_hive_promotion_receipt(preview, config)
+
+    assert receipt["state"] == "drifted"
+    assert "should be absent" in receipt["sections"][0]["after_differences"][0]
+
+
+def test_receipt_blocks_preview_that_is_not_review_only():
+    preview = _preview()
+    preview["safe_to_auto_apply"] = True
+
+    receipt = build_hive_promotion_receipt(preview, {})
+
+    assert receipt["state"] == "blocked_invalid_preview"
+    assert receipt["sections"] == []
+    assert receipt["automatic_config_mutation"] is False
