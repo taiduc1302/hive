@@ -27,7 +27,7 @@ A standalone module entry point is also available:
 
 A canary is created against an exact current configuration:
 
-    model_id + effort + execution_mode
+    provider + model_id + effort + execution_mode
 
 Before producing a manual change package, v0.20 compares that pre-canary configuration with the current routing-matrix primary.
 
@@ -43,7 +43,7 @@ Even when the input state says eligible_for_manual_promotion, the review step re
 - the fresh-only leaderboard still says promote;
 - the fresh leaderboard winner still matches the candidate;
 - current and candidate configurations are complete;
-- the live routing primary still exactly matches the pre-canary current configuration;
+- the live routing primary still exactly matches the pre-canary provider, model, effort, and execution configuration;
 - candidate and current are not identical.
 
 Any inconsistent input is blocked rather than converted into a change package.
