@@ -16,6 +16,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
       - "docs/AI_MODEL_ADVISOR_PROMOTION_PLANS.md"
+      - "docs/AI_MODEL_ADVISOR_PROMOTION_REVIEW.md"
       - "docs/CHATGPT_MODEL_ADVISOR_SETUP.md"
       - ".github/workflows/ai-model-advisor.yml"
   schedule:
@@ -244,6 +245,81 @@ jobs:
             --output model-advisor-output/promotion-plan-smoke.md \
             --json-output model-advisor-output/promotion-plan-smoke.json
 
+      - name: Smoke-test promotion review package
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          out = Path("model-advisor-output")
+          matrix = {
+              "routing_matrix": [
+                  {
+                      "category": "debugging",
+                      "primary": {
+                          "provider": "test",
+                          "model_id": "current-model",
+                          "label": "Current Model",
+                          "effort": "high",
+                          "execution_mode": "single",
+                      },
+                      "alternatives": [],
+                  }
+              ]
+          }
+          canary = {
+              "automatic_policy_mutation": False,
+              "automatic_rollback": False,
+              "evaluations": [
+                  {
+                      "category": "debugging",
+                      "state": "eligible_for_manual_promotion",
+                      "current": {
+                          "provider": "test",
+                          "model_id": "current-model",
+                          "effort": "high",
+                          "execution_mode": "single",
+                      },
+                      "candidate": {
+                          "provider": "test",
+                          "model_id": "candidate-model",
+                          "effort": "high",
+                          "execution_mode": "single",
+                      },
+                      "required_pairs": 3,
+                      "matched_pairs": 3,
+                      "leaderboard_status": "promote",
+                      "winner_matches_candidate": True,
+                      "safe_to_apply": False,
+                      "requires_human_approval": True,
+                  }
+              ],
+          }
+          (out / "promotion-review-matrix.json").write_text(
+              json.dumps(matrix), encoding="utf-8"
+          )
+          (out / "promotion-review-canary.json").write_text(
+              json.dumps(canary), encoding="utf-8"
+          )
+          PY
+          python -m tools.ai_model_advisor.cli promotion-review \
+            --canary-evaluation model-advisor-output/promotion-review-canary.json \
+            --routing-matrix model-advisor-output/promotion-review-matrix.json \
+            --output model-advisor-output/promotion-review-smoke.md \
+            --json-output model-advisor-output/promotion-review-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path("model-advisor-output/promotion-review-smoke.json").read_text()
+          )
+          assert report["ready_changes"] == 1
+          assert report["reviews"][0]["state"] == "ready_for_manual_edit"
+          assert report["safe_to_apply"] is False
+          assert report["automatic_policy_mutation"] is False
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -257,6 +333,8 @@ jobs:
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/promotion-plan-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/promotion-review-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\\n---\\n\\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-runtime-capabilities.md >> "$GITHUB_STEP_SUMMARY"
