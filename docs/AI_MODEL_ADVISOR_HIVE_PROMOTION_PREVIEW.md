@@ -41,13 +41,14 @@ Non-single execution transitions are blocked because Hive model/reasoning config
 
 ## Command
 
-    python -m tools.ai_model_advisor.hive_promotion_preview \
+    python -m tools.ai_model_advisor.cli hive-promotion-preview \
       --promotion-review model-advisor-output/promotion-review.json \
       --category debugging \
       --scope queen \
-      --output model-advisor-output/hive-promotion-preview.md
+      --output model-advisor-output/hive-promotion-preview.md \
+      --json-output model-advisor-output/hive-promotion-preview.json
 
-Use `--json` for structured output.
+The standalone `python -m tools.ai_model_advisor.hive_promotion_preview` entry point remains available and supports `--json`.
 
 For `effort=default`, the patch emits `reasoning_effort: null`; under the documented merge-patch semantics, that removes an explicit override and restores provider default behavior.
 
