@@ -17,15 +17,16 @@ _REVIEW_STATES = (
 )
 
 
-def _config_key(config: dict[str, Any] | None) -> tuple[str, str, str] | None:
+def _config_key(config: dict[str, Any] | None) -> tuple[str, str, str, str] | None:
     if not config:
         return None
+    provider = str(config.get("provider", "")).strip()
     model_id = str(config.get("model_id", "")).strip()
     effort = str(config.get("effort", "")).strip()
     execution_mode = str(config.get("execution_mode", "")).strip()
-    if not model_id or not effort or not execution_mode:
+    if not provider or not model_id or not effort or not execution_mode:
         return None
-    return model_id, effort, execution_mode
+    return provider, model_id, effort, execution_mode
 
 
 def _compact_config(config: dict[str, Any] | None) -> dict[str, Any] | None:
