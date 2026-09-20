@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from tools.ai_model_advisor.cli import build_parser
 from tools.ai_model_advisor.hive_promotion_preview import (
     HivePromotionPreviewError,
     build_hive_promotion_preview,
