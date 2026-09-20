@@ -6,12 +6,12 @@ from tools.ai_model_advisor.cli import build_parser
 from tools.ai_model_advisor.promotion_review import build_promotion_review
 
 
-def _matrix(primary_model: str = "model-b"):
+def _matrix(primary_model: str = "model-b", primary_provider: str = "test"):
     return [
         {
             "category": "debugging",
             "primary": {
-                "provider": "test",
+                "provider": primary_provider,
                 "model_id": primary_model,
                 "label": primary_model,
                 "effort": "high",
@@ -70,6 +70,17 @@ def test_eligible_canary_builds_manual_change_package():
 
 def test_route_drift_blocks_stale_manual_promotion():
     item = build_promotion_review(_evaluation(), _matrix("model-c"))["reviews"][0]
+
+    assert item["state"] == "blocked_route_drift"
+    assert item["manual_change"] is None
+    assert item["safe_to_apply"] is False
+
+
+def test_route_provider_drift_blocks_stale_manual_promotion():
+    item = build_promotion_review(
+        _evaluation(),
+        _matrix(primary_provider="other-provider"),
+    )["reviews"][0]
 
     assert item["state"] == "blocked_route_drift"
     assert item["manual_change"] is None
