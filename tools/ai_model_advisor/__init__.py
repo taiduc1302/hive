@@ -5,6 +5,7 @@ from .canary_evaluate import evaluate_promotion_canary
 from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
 from .hive_config_preview import build_hive_config_preview
+from .hive_promotion_gate import build_hive_promotion_gate
 from .hive_promotion_preview import build_hive_promotion_preview
 from .hive_promotion_receipt import build_hive_promotion_receipt
 from .promotion_plan import build_promotion_plans
@@ -18,6 +19,7 @@ from .target_routing import recommend_for_target
 __all__ = [
     "ActivityAnalyzer",
     "FeedbackStore",
+    "build_hive_promotion_gate",
     "build_hive_promotion_preview",
     "build_hive_promotion_receipt",
     "ModelRegistry",
@@ -32,4 +34,4 @@ __all__ = [
     "evaluate_promotion_canary",
     "recommend_for_target",
 ]
-__version__ = "0.23.0"
+__version__ = "0.24.0"

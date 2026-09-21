@@ -30,6 +30,18 @@ Promotion-canary evaluation uses only exact matched task IDs from the dedicated 
 
 This keeps fresh canary evidence aligned with the controlled experiment evaluator, which also excludes ambiguous duplicate attempts rather than averaging or last-write-wins selection.
 
+## Hive promotion runtime gate
+
+A reviewed promotion is not treated as runtime-ready merely because the model exists in the registry or because a direct-provider experiment succeeded.
+
+The v0.24 Hive promotion gate requires:
+
+- current Hive host plumbing from the runtime capability probe;
+- exact candidate `model + effort + execution_mode` evidence from the Hive LiteLLM adapter;
+- the evidence LiteLLM version to match the currently installed Hive runtime.
+
+Missing, mismatched, or stale evidence blocks the promotion before the operator performs the manual Hive config edit. The gate remains non-mutating and still requires human approval.
+
 ## Privacy boundary
 
 There is no hidden API in this project for reading a user's entire ChatGPT profile/history. The advisor analyzes only data explicitly available to it: a supplied ChatGPT export, generic activity JSON, GitHub events, explicitly authorized sources, or local Hive telemetry that the user deliberately points the importer at.
@@ -47,6 +59,7 @@ python -m tools.ai_model_advisor.cli feedback-report --feedback ~/.hive/model-fe
 python -m tools.ai_model_advisor.cli feedback-import-hive --events /path/to/session/events.jsonl --details /path/to/session/logs/details.jsonl --feedback ~/.hive/model-feedback.jsonl --task-category repo_review --output /tmp/hive-feedback-import.md
 python -m tools.ai_model_advisor.cli feedback-import-hive-root --root ~/.hive --feedback ~/.hive/model-feedback.jsonl --output /tmp/hive-history-preview.md
 python -m tools.ai_model_advisor.cli feedback-import-hive-root --root ~/.hive --feedback ~/.hive/model-feedback.jsonl --apply --output /tmp/hive-history-import.md
+python -m tools.ai_model_advisor.cli hive-promotion-gate --promotion-preview /tmp/hive-promotion-preview.json --runtime-capabilities /tmp/hive-runtime-capabilities.json --hive-evidence /tmp/hive-candidate-evidence.json --require-ready --output /tmp/hive-promotion-gate.md --json-output /tmp/hive-promotion-gate.json
 python -m tools.ai_model_advisor.cli scan --baseline /tmp/source-baseline.json --write-baseline /tmp/source-baseline.json --output /tmp/source-scan.md --json-output /tmp/source-scan.json
 ```
 

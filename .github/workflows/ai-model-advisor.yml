@@ -13,6 +13,8 @@ on:
       - "docs/AI_MODEL_ADVISOR_RUNNER.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_ADAPTER.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_PREVIEW.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_GATE.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_RECEIPT.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
@@ -346,6 +348,65 @@ jobs:
           assert preview["rollback_patch"]["llm"]["model"] == "current-model"
           PY
 
+      - name: Smoke-test Hive promotion runtime gate
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          capabilities = {
+              "schema_version": 1,
+              "host": "hive",
+              "litellm": {
+                  "repository_pin": {"version": "1.83.4", "source": "pyproject.toml"},
+                  "installed_version": "1.83.4",
+                  "versions_match": True,
+              },
+              "transport": {"single_call_evidence_ready": True},
+              "native_config": {"reasoning_effort_passthrough": True},
+          }
+          evidence = {
+              "schema_version": 1,
+              "transport": "hive_litellm",
+              "litellm_version": "1.83.4",
+              "applied_configuration": {
+                  "provider": "test",
+                  "model_id": "candidate-model",
+                  "effort": "high",
+                  "execution_mode": "single",
+              },
+              "outcome": "partial",
+              "response_text": "SMOKE_RESPONSE_MUST_NOT_LEAK",
+          }
+          out = Path("model-advisor-output")
+          (out / "hive-promotion-gate-capabilities.json").write_text(
+              json.dumps(capabilities), encoding="utf-8"
+          )
+          (out / "hive-promotion-gate-evidence.json").write_text(
+              json.dumps(evidence), encoding="utf-8"
+          )
+          PY
+          python -m tools.ai_model_advisor.cli hive-promotion-gate \
+            --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
+            --runtime-capabilities model-advisor-output/hive-promotion-gate-capabilities.json \
+            --hive-evidence model-advisor-output/hive-promotion-gate-evidence.json \
+            --require-ready \
+            --output model-advisor-output/hive-promotion-gate-smoke.md \
+            --json-output model-advisor-output/hive-promotion-gate-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("model-advisor-output/hive-promotion-gate-smoke.json")
+          raw = path.read_text()
+          gate = json.loads(raw)
+          assert gate["state"] == "runtime_ready_for_manual_hive_edit"
+          assert gate["ready"] is True
+          assert gate["safe_to_auto_apply"] is False
+          assert gate["automatic_config_mutation"] is False
+          assert "SMOKE_RESPONSE_MUST_NOT_LEAK" not in raw
+          PY
+
       - name: Smoke-test Hive promotion verification receipt
         run: |
           python - <<'PY'
@@ -402,6 +463,8 @@ jobs:
           cat model-advisor-output/promotion-review-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-preview-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-gate-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-receipt-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"

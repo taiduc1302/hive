@@ -15,6 +15,10 @@ from .experiment_run_cli import main as experiment_run_main
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
+from .hive_promotion_gate import (
+    build_hive_promotion_gate,
+    render_markdown as hive_promotion_gate_markdown,
+)
 from .hive_promotion_preview import (
     build_hive_promotion_preview,
     render_markdown as hive_promotion_preview_markdown,
@@ -36,6 +40,7 @@ from .recommend import RecommendationEngine
 from .registry import ModelRegistry
 from .report import recommendation_markdown
 from .routing_proposals import build_routing_proposals, routing_proposals_markdown
+from .runtime_capabilities import build_capability_report
 from .sources import (
     baseline_from_report,
     load_baseline,
@@ -348,6 +353,42 @@ def command_hive_promotion_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_gate(args: argparse.Namespace) -> int:
+    preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
+    if not isinstance(preview, dict):
+        raise ValueError("promotion preview root must be a JSON object")
+
+    if args.runtime_capabilities:
+        capabilities = json.loads(
+            Path(args.runtime_capabilities).read_text(encoding="utf-8")
+        )
+        if not isinstance(capabilities, dict):
+            raise ValueError("runtime capabilities root must be a JSON object")
+    else:
+        capabilities = build_capability_report()
+
+    evidence = None
+    if args.hive_evidence:
+        evidence = json.loads(Path(args.hive_evidence).read_text(encoding="utf-8"))
+        if not isinstance(evidence, dict):
+            raise ValueError("Hive evidence root must be a JSON object")
+
+    gate = build_hive_promotion_gate(preview, capabilities, evidence)
+    markdown = hive_promotion_gate_markdown(gate)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(gate, ensure_ascii=False, indent=2) + "\n",
+        )
+    if args.require_ready and not gate.get("ready"):
+        return 2
+    return 0
+
+
 def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -599,6 +640,22 @@ def build_parser() -> argparse.ArgumentParser:
     hive_promotion_preview.add_argument("--output", help="Optional Markdown Hive promotion preview")
     hive_promotion_preview.add_argument("--json-output")
     hive_promotion_preview.set_defaults(func=command_hive_promotion_preview)
+
+    hive_promotion_gate = sub.add_parser("hive-promotion-gate")
+    hive_promotion_gate.add_argument("--promotion-preview", required=True)
+    hive_promotion_gate.add_argument("--runtime-capabilities")
+    hive_promotion_gate.add_argument("--hive-evidence")
+    hive_promotion_gate.add_argument(
+        "--output",
+        help="Optional Markdown Hive promotion runtime gate report",
+    )
+    hive_promotion_gate.add_argument("--json-output")
+    hive_promotion_gate.add_argument(
+        "--require-ready",
+        action="store_true",
+        help="Exit 2 unless exact current-runtime evidence makes the gate ready",
+    )
+    hive_promotion_gate.set_defaults(func=command_hive_promotion_gate)
 
     hive_promotion_receipt = sub.add_parser("hive-promotion-receipt")
     hive_promotion_receipt.add_argument("--promotion-preview", required=True)
