@@ -477,6 +477,64 @@ jobs:
           assert lifecycle["artifact_hashes"]["promotion_receipt_sha256"]
           PY
 
+      - name: Smoke-test Hive promotion rollback audit
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = {
+              "llm": {
+                  "provider": "test",
+                  "model": "current-model",
+                  "reasoning_effort": "high",
+                  "api_key": "ROLLBACK_SMOKE_SECRET_MUST_NOT_LEAK",
+              }
+          }
+          target = Path(os.environ["RUNNER_TEMP"]) / "hive-config-rollback-smoke.json"
+          target.write_text(json.dumps(config), encoding="utf-8")
+          PY
+          python -m tools.ai_model_advisor.cli hive-promotion-receipt \
+            --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-rollback-smoke.json" \
+            --output model-advisor-output/hive-promotion-rollback-receipt-smoke.md \
+            --json-output model-advisor-output/hive-promotion-rollback-receipt-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path(
+              "model-advisor-output/hive-promotion-rollback-receipt-smoke.json"
+          )
+          raw = path.read_text()
+          receipt = json.loads(raw)
+          assert receipt["state"] == "not_applied"
+          assert "ROLLBACK_SMOKE_SECRET_MUST_NOT_LEAK" not in raw
+          PY
+          python -m tools.ai_model_advisor.cli hive-promotion-rollback \
+            --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
+            --applied-lifecycle model-advisor-output/hive-promotion-lifecycle-smoke.json \
+            --rollback-receipt model-advisor-output/hive-promotion-rollback-receipt-smoke.json \
+            --require-rolled-back-verified \
+            --output model-advisor-output/hive-promotion-rollback-smoke.md \
+            --json-output model-advisor-output/hive-promotion-rollback-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          rollback = json.loads(
+              Path("model-advisor-output/hive-promotion-rollback-smoke.json").read_text()
+          )
+          assert rollback["state"] == "rolled_back_verified"
+          assert rollback["rolled_back_verified"] is True
+          assert rollback["automatic_rollback"] is False
+          assert rollback["automatic_config_mutation"] is False
+          assert rollback["artifact_hashes"]["promotion_preview_sha256"]
+          assert rollback["artifact_hashes"]["applied_lifecycle_sha256"]
+          assert rollback["artifact_hashes"]["rollback_receipt_sha256"]
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -499,6 +557,8 @@ jobs:
           cat model-advisor-output/hive-promotion-receipt-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-lifecycle-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-rollback-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
