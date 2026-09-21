@@ -10,7 +10,6 @@ from collections.abc import Callable
 from typing import Any
 
 from .hive_litellm_adapter import (
-    HiveAdapterError,
     _DEFAULT_MAX_OUTPUT_TOKENS,
     _DEFAULT_TIMEOUT_SECONDS,
     _RUNNER_SCHEMA_VERSION,
@@ -20,6 +19,7 @@ from .hive_litellm_adapter import (
     _positive_int_env,
     _required_string,
     _verify_wire_configuration,
+    HiveAdapterError,
 )
 
 AgentLoopExecutor = Callable[[str, dict[str, str], Any, int, float], dict[str, Any]]
