@@ -5,8 +5,8 @@ import os
 import pytest
 
 from tools.ai_model_advisor.hive_agent_loop_adapter import (
-    validate_agent_loop_payload,
     run_hive_agent_loop_adapter,
+    validate_agent_loop_payload,
 )
 from tools.ai_model_advisor.hive_litellm_adapter import HiveAdapterError
 
