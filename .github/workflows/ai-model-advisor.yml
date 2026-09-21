@@ -344,6 +344,7 @@ jobs:
           assert preview["state"] == "ready_for_manual_hive_edit"
           assert preview["safe_to_auto_apply"] is False
           assert preview["automatic_config_mutation"] is False
+          assert preview["promotion_review_sha256"]
           assert preview["apply_patch"]["llm"]["model"] == "candidate-model"
           assert preview["rollback_patch"]["llm"]["model"] == "current-model"
           PY
@@ -447,6 +448,35 @@ jobs:
           assert "SMOKE_SECRET_MUST_NOT_LEAK" not in raw
           PY
 
+      - name: Smoke-test Hive promotion lifecycle audit
+        run: |
+          python -m tools.ai_model_advisor.cli hive-promotion-lifecycle \
+            --promotion-review model-advisor-output/promotion-review-smoke.json \
+            --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
+            --runtime-gate model-advisor-output/hive-promotion-gate-smoke.json \
+            --promotion-receipt model-advisor-output/hive-promotion-receipt-smoke.json \
+            --require-applied-verified \
+            --output model-advisor-output/hive-promotion-lifecycle-smoke.md \
+            --json-output model-advisor-output/hive-promotion-lifecycle-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          lifecycle_path = Path(
+              "model-advisor-output/hive-promotion-lifecycle-smoke.json"
+          )
+          lifecycle = json.loads(lifecycle_path.read_text())
+          assert lifecycle["state"] == "applied_verified"
+          assert lifecycle["applied_verified"] is True
+          assert lifecycle["ready_for_manual_hive_edit"] is False
+          assert lifecycle["automatic_config_mutation"] is False
+          assert lifecycle["automatic_rollback"] is False
+          assert lifecycle["artifact_hashes"]["promotion_review_sha256"]
+          assert lifecycle["artifact_hashes"]["promotion_preview_sha256"]
+          assert lifecycle["artifact_hashes"]["runtime_gate_sha256"]
+          assert lifecycle["artifact_hashes"]["promotion_receipt_sha256"]
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -467,6 +497,8 @@ jobs:
           cat model-advisor-output/hive-promotion-gate-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-receipt-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-lifecycle-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
