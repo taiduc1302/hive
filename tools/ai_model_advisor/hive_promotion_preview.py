@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,16 @@ _SCOPES = ("queen", "worker", "both")
 
 class HivePromotionPreviewError(ValueError):
     """Raised when a promotion review cannot be selected for Hive preview."""
+
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _required_string(config: dict[str, Any], key: str) -> str:
@@ -112,6 +123,7 @@ def build_hive_promotion_preview(
         "category": category,
         "scope": scope,
         "change_id": change_id,
+        "promotion_review_sha256": _canonical_sha256(report),
         "safe_to_auto_apply": False,
         "automatic_config_mutation": False,
         "requires_human_approval": True,

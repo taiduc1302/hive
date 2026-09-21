@@ -19,6 +19,10 @@ from .hive_promotion_gate import (
     build_hive_promotion_gate,
     render_markdown as hive_promotion_gate_markdown,
 )
+from .hive_promotion_lifecycle import (
+    build_hive_promotion_lifecycle,
+    render_markdown as hive_promotion_lifecycle_markdown,
+)
 from .hive_promotion_preview import (
     build_hive_promotion_preview,
     render_markdown as hive_promotion_preview_markdown,
@@ -389,6 +393,49 @@ def command_hive_promotion_gate(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_lifecycle(args: argparse.Namespace) -> int:
+    review = json.loads(Path(args.promotion_review).read_text(encoding="utf-8"))
+    if not isinstance(review, dict):
+        raise ValueError("promotion review root must be a JSON object")
+    preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
+    if not isinstance(preview, dict):
+        raise ValueError("promotion preview root must be a JSON object")
+
+    runtime_gate = None
+    if args.runtime_gate:
+        runtime_gate = json.loads(Path(args.runtime_gate).read_text(encoding="utf-8"))
+        if not isinstance(runtime_gate, dict):
+            raise ValueError("runtime gate root must be a JSON object")
+
+    promotion_receipt = None
+    if args.promotion_receipt:
+        promotion_receipt = json.loads(
+            Path(args.promotion_receipt).read_text(encoding="utf-8")
+        )
+        if not isinstance(promotion_receipt, dict):
+            raise ValueError("promotion receipt root must be a JSON object")
+
+    report = build_hive_promotion_lifecycle(
+        review,
+        preview,
+        runtime_gate,
+        promotion_receipt,
+    )
+    markdown = hive_promotion_lifecycle_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        )
+    if args.require_applied_verified and not report.get("applied_verified"):
+        return 2
+    return 0
+
+
 def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -656,6 +703,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 2 unless exact current-runtime evidence makes the gate ready",
     )
     hive_promotion_gate.set_defaults(func=command_hive_promotion_gate)
+
+    hive_promotion_lifecycle = sub.add_parser("hive-promotion-lifecycle")
+    hive_promotion_lifecycle.add_argument("--promotion-review", required=True)
+    hive_promotion_lifecycle.add_argument("--promotion-preview", required=True)
+    hive_promotion_lifecycle.add_argument("--runtime-gate")
+    hive_promotion_lifecycle.add_argument("--promotion-receipt")
+    hive_promotion_lifecycle.add_argument(
+        "--output",
+        help="Optional Markdown Hive promotion lifecycle audit",
+    )
+    hive_promotion_lifecycle.add_argument("--json-output")
+    hive_promotion_lifecycle.add_argument(
+        "--require-applied-verified",
+        action="store_true",
+        help="Exit 2 unless the lifecycle reaches applied_verified",
+    )
+    hive_promotion_lifecycle.set_defaults(func=command_hive_promotion_lifecycle)
 
     hive_promotion_receipt = sub.add_parser("hive-promotion-receipt")
     hive_promotion_receipt.add_argument("--promotion-preview", required=True)
