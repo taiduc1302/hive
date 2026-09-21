@@ -101,3 +101,37 @@ Scopes are `queen`, `worker`, or `both`.
 The preview changes reasoning effort only. It does not change credentials, provider, model, or orchestration, and it never edits `configuration.json` automatically.
 
 For `effort=default`, the merge patch uses `null` for `reasoning_effort`, meaning the explicit override should be removed so the provider default is restored.
+
+## Experimental Hive AgentLoop adapter
+
+Advisor v0.20.0 adds a separate experimental adapter that executes the benchmark task through Hive's real `AgentLoop.execute()` path rather than calling `LiteLLMProvider.complete()` directly.
+
+```text
+python -m tools.ai_model_advisor.hive_agent_loop_adapter
+```
+
+Its runner payload must use:
+
+```json
+{
+  "execution_mode": "hive_agent_loop"
+}
+```
+
+The adapter deliberately runs a minimal isolated loop:
+
+- temporary `HIVE_HOME`;
+- no tools;
+- one loop iteration;
+- no stream retry or capacity retry;
+- no queen/colony UI state;
+- the same post-transform model and reasoning-effort wire proof used by the single-call Hive adapter;
+- `acceptance_mode=external_judge` remains mandatory.
+
+A completed AgentLoop still returns only `outcome: "partial"`. Deterministic acceptance evidence is required before benchmark feedback can become success/failure evidence.
+
+### Not yet a catalogued execution target
+
+The v0.20 adapter is intentionally **not** added to `execution_targets` yet. Therefore the planner, target binder, and `--use-target` path must continue to treat `hive_agent_loop` as unsupported.
+
+This is deliberate fail-closed staging: the adapter code can be exercised and reviewed without making the rest of the Advisor route real experiments through it automatically. Catalog promotion should happen only after the AgentLoop runtime path and post-transform evidence are validated in the installed Hive environment.
