@@ -4,6 +4,7 @@ from .activity import ActivityAnalyzer
 from .canary_evaluate import evaluate_promotion_canary
 from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
+from .hive_agent_loop_adapter import run_hive_agent_loop_adapter
 from .hive_config_preview import build_hive_config_preview
 from .promotion_plan import build_promotion_plans
 from .recommend import RecommendationEngine
@@ -25,5 +26,6 @@ __all__ = [
     "build_target_experiment_plan",
     "evaluate_promotion_canary",
     "recommend_for_target",
+    "run_hive_agent_loop_adapter",
 ]
-__version__ = "0.19.0"
+__version__ = "0.20.0"
