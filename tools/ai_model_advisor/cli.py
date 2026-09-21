@@ -31,6 +31,10 @@ from .hive_promotion_receipt import (
     build_hive_promotion_receipt,
     render_markdown as hive_promotion_receipt_markdown,
 )
+from .hive_promotion_rollback import (
+    build_hive_promotion_rollback_audit,
+    render_markdown as hive_promotion_rollback_markdown,
+)
 from .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
@@ -436,6 +440,39 @@ def command_hive_promotion_lifecycle(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_rollback(args: argparse.Namespace) -> int:
+    preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
+    if not isinstance(preview, dict):
+        raise ValueError("promotion preview root must be a JSON object")
+    lifecycle = json.loads(Path(args.applied_lifecycle).read_text(encoding="utf-8"))
+    if not isinstance(lifecycle, dict):
+        raise ValueError("applied lifecycle root must be a JSON object")
+    receipt = json.loads(Path(args.rollback_receipt).read_text(encoding="utf-8"))
+    if not isinstance(receipt, dict):
+        raise ValueError("rollback receipt root must be a JSON object")
+
+    report = build_hive_promotion_rollback_audit(
+        preview,
+        lifecycle,
+        receipt,
+    )
+    markdown = hive_promotion_rollback_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        )
+    if args.require_rolled_back_verified and not report.get(
+        "rolled_back_verified"
+    ):
+        return 2
+    return 0
+
+
 def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -720,6 +757,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 2 unless the lifecycle reaches applied_verified",
     )
     hive_promotion_lifecycle.set_defaults(func=command_hive_promotion_lifecycle)
+
+    hive_promotion_rollback = sub.add_parser("hive-promotion-rollback")
+    hive_promotion_rollback.add_argument("--promotion-preview", required=True)
+    hive_promotion_rollback.add_argument("--applied-lifecycle", required=True)
+    hive_promotion_rollback.add_argument("--rollback-receipt", required=True)
+    hive_promotion_rollback.add_argument(
+        "--output",
+        help="Optional Markdown Hive promotion rollback audit",
+    )
+    hive_promotion_rollback.add_argument("--json-output")
+    hive_promotion_rollback.add_argument(
+        "--require-rolled-back-verified",
+        action="store_true",
+        help="Exit 2 unless the rollback is verified after a prior applied lifecycle",
+    )
+    hive_promotion_rollback.set_defaults(func=command_hive_promotion_rollback)
 
     hive_promotion_receipt = sub.add_parser("hive-promotion-receipt")
     hive_promotion_receipt.add_argument("--promotion-preview", required=True)
