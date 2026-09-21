@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+from argparse import Namespace
 from copy import deepcopy
 
+from tools.ai_model_advisor.cli import command_hive_promotion_lifecycle
 from tools.ai_model_advisor.hive_promotion_gate import build_hive_promotion_gate
 from tools.ai_model_advisor.hive_promotion_lifecycle import (
     _canonical_sha256,
@@ -256,3 +259,52 @@ def test_lifecycle_blocks_post_application_drift() -> None:
     assert receipt["state"] == "drifted"
     assert report["state"] == "blocked_post_apply_drift"
     assert report["applied_verified"] is False
+
+
+def test_unified_cli_command_writes_applied_verified_artifacts(tmp_path) -> None:
+    review = _review()
+    preview = _preview(review)
+    gate = _gate(preview)
+    receipt = build_hive_promotion_receipt(
+        preview,
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-6-astra",
+                "reasoning_effort": "high",
+            }
+        },
+    )
+
+    review_path = tmp_path / "review.json"
+    preview_path = tmp_path / "preview.json"
+    gate_path = tmp_path / "gate.json"
+    receipt_path = tmp_path / "receipt.json"
+    markdown_path = tmp_path / "lifecycle.md"
+    json_path = tmp_path / "lifecycle.json"
+
+    for path, payload in (
+        (review_path, review),
+        (preview_path, preview),
+        (gate_path, gate),
+        (receipt_path, receipt),
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    code = command_hive_promotion_lifecycle(
+        Namespace(
+            promotion_review=str(review_path),
+            promotion_preview=str(preview_path),
+            runtime_gate=str(gate_path),
+            promotion_receipt=str(receipt_path),
+            output=str(markdown_path),
+            json_output=str(json_path),
+            require_applied_verified=True,
+        )
+    )
+
+    assert code == 0
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["state"] == "applied_verified"
+    assert payload["applied_verified"] is True
+    assert "Hive Promotion Lifecycle Audit" in markdown_path.read_text(encoding="utf-8")
