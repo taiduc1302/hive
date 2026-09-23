@@ -481,9 +481,10 @@ def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
     if not isinstance(current_config, dict):
         raise ValueError("Hive configuration root must be a JSON object")
     previous_receipt = None
-    if args.previous_receipt:
+    previous_receipt_path = getattr(args, "previous_receipt", None)
+    if previous_receipt_path:
         previous_receipt = json.loads(
-            Path(args.previous_receipt).read_text(encoding="utf-8")
+            Path(previous_receipt_path).read_text(encoding="utf-8")
         )
         if not isinstance(previous_receipt, dict):
             raise ValueError("previous receipt root must be a JSON object")
