@@ -5,6 +5,11 @@ from .canary_evaluate import evaluate_promotion_canary
 from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
 from .hive_config_preview import build_hive_config_preview
+from .hive_promotion_checkpoint import (
+    build_hive_promotion_checkpoint,
+    validate_hive_promotion_checkpoint,
+    verify_hive_promotion_checkpoint,
+)
 from .hive_promotion_gate import build_hive_promotion_gate
 from .hive_promotion_journal import (
     append_hive_promotion_journal,
@@ -25,23 +30,26 @@ from .target_routing import recommend_for_target
 __all__ = [
     "ActivityAnalyzer",
     "FeedbackStore",
+    "append_hive_promotion_journal",
+    "build_empirical_leaderboard",
+    "build_hive_config_preview",
+    "build_hive_promotion_checkpoint",
     "build_hive_promotion_gate",
+    "build_hive_promotion_journal",
     "build_hive_promotion_preview",
     "build_hive_promotion_receipt",
     "build_hive_promotion_rollback_audit",
-    "append_hive_promotion_journal",
-    "build_hive_promotion_journal",
-    "validate_hive_promotion_journal",
-    "ModelRegistry",
-    "RecommendationEngine",
-    "UsageRecord",
-    "build_empirical_leaderboard",
-    "build_hive_config_preview",
     "build_promotion_plans",
     "build_promotion_review",
     "build_routing_proposals",
     "build_target_experiment_plan",
     "evaluate_promotion_canary",
+    "ModelRegistry",
+    "RecommendationEngine",
     "recommend_for_target",
+    "UsageRecord",
+    "validate_hive_promotion_checkpoint",
+    "validate_hive_promotion_journal",
+    "verify_hive_promotion_checkpoint",
 ]
-__version__ = "0.28.0"
+__version__ = "0.29.0"

@@ -18,6 +18,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_LIFECYCLE.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_ROLLBACK.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_JOURNAL.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_CHECKPOINT.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
@@ -575,6 +576,60 @@ jobs:
           assert journal["automatic_rollback"] is False
           PY
 
+      - name: Smoke-test Hive promotion journal checkpoint
+        shell: bash
+        run: |
+          python -m tools.ai_model_advisor.hive_promotion_checkpoint create \
+            --journal model-advisor-output/hive-promotion-journal-smoke.json \
+            --output model-advisor-output/hive-promotion-checkpoint-smoke.md \
+            --json-output model-advisor-output/hive-promotion-checkpoint-smoke.json
+          python -m tools.ai_model_advisor.hive_promotion_checkpoint verify \
+            --journal model-advisor-output/hive-promotion-journal-smoke.json \
+            --checkpoint model-advisor-output/hive-promotion-checkpoint-smoke.json \
+            --output model-advisor-output/hive-promotion-checkpoint-verify-smoke.md \
+            --json-output model-advisor-output/hive-promotion-checkpoint-verify-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          checkpoint = json.loads(
+              Path("model-advisor-output/hive-promotion-checkpoint-smoke.json").read_text()
+          )
+          report = json.loads(
+              Path("model-advisor-output/hive-promotion-checkpoint-verify-smoke.json").read_text()
+          )
+          assert checkpoint["entry_count"] == 3
+          assert checkpoint["head_entry_sha256"]
+          assert checkpoint["journal_sha256"]
+          assert checkpoint["checkpoint_sha256"]
+          assert report["verified"] is True
+          assert report["status"] == "verified"
+          assert report["automatic_config_mutation"] is False
+          assert report["automatic_rollback"] is False
+          PY
+          set +e
+          python -m tools.ai_model_advisor.hive_promotion_checkpoint verify \
+            --journal model-advisor-output/hive-promotion-journal-preview-smoke.json \
+            --checkpoint model-advisor-output/hive-promotion-checkpoint-smoke.json \
+            --json-output model-advisor-output/hive-promotion-checkpoint-mismatch-smoke.json
+          status=$?
+          set -e
+          test "$status" -eq 2
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path("model-advisor-output/hive-promotion-checkpoint-mismatch-smoke.json").read_text()
+          )
+          assert report["verified"] is False
+          assert report["status"] == "mismatch"
+          fields = {item["field"] for item in report["mismatches"]}
+          assert "entry_count" in fields
+          assert "head_entry_sha256" in fields
+          assert "journal_sha256" in fields
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -601,6 +656,8 @@ jobs:
           cat model-advisor-output/hive-promotion-rollback-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-journal-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-checkpoint-verify-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
