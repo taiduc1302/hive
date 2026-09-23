@@ -16,6 +16,7 @@ from .hive_promotion_journal import (
     build_hive_promotion_journal,
     validate_hive_promotion_journal,
 )
+from .hive_promotion_registry import build_hive_promotion_registry
 from .hive_promotion_preview import build_hive_promotion_preview
 from .hive_promotion_receipt import build_hive_promotion_receipt
 from .hive_promotion_rollback import build_hive_promotion_rollback_audit
@@ -38,6 +39,7 @@ __all__ = [
     "build_hive_promotion_journal",
     "build_hive_promotion_preview",
     "build_hive_promotion_receipt",
+    "build_hive_promotion_registry",
     "build_hive_promotion_rollback_audit",
     "build_promotion_plans",
     "build_promotion_review",
@@ -52,4 +54,4 @@ __all__ = [
     "validate_hive_promotion_journal",
     "verify_hive_promotion_checkpoint",
 ]
-__version__ = "0.29.0"
+__version__ = "0.30.0"
