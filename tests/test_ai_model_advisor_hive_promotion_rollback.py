@@ -257,7 +257,7 @@ def test_rollback_audit_blocks_replayed_pre_application_receipt() -> None:
 
     assert stale_receipt["state"] == "not_applied"
     assert stale_receipt["previous_receipt_sha256"] is None
-    assert report["state"] == "blocked_chain_mismatch"
+    assert report["state"] == "blocked_stale_rollback_receipt"
     assert "previous_receipt_sha256" in report["reason"]
 
 
