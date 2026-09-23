@@ -100,6 +100,38 @@ def test_receipt_reports_not_applied_when_before_state_is_unchanged():
     assert receipt["sections"][0]["state"] == "before"
 
 
+
+def test_receipt_can_hash_link_previous_verification_without_copying_it():
+    preview = _preview()
+    applied = build_hive_promotion_receipt(
+        preview,
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-6-astra",
+                "reasoning_effort": "high",
+            }
+        },
+    )
+    rollback = build_hive_promotion_receipt(
+        preview,
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "medium",
+            }
+        },
+        previous_receipt=applied,
+    )
+
+    assert rollback["state"] == "not_applied"
+    assert rollback["previous_receipt_sha256"]
+    assert rollback["previous_receipt_sha256"] != applied["receipt_sha256"]
+    assert "sections" in applied
+    assert "previous_receipt" not in rollback
+
+
 def test_receipt_reports_drift_for_partial_both_scope_application():
     config = {
         "llm": {
