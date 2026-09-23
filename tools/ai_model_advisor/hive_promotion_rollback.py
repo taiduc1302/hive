@@ -331,9 +331,14 @@ def build_hive_promotion_rollback_audit(
             transition=transition,
         )
     except HivePromotionRollbackError as exc:
+        state = (
+            "blocked_stale_rollback_receipt"
+            if "previous_receipt_sha256" in str(exc)
+            else "blocked_chain_mismatch"
+        )
         return _blocked(
             base,
-            "blocked_chain_mismatch",
+            state,
             str(exc),
         )
 
