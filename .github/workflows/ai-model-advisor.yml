@@ -20,6 +20,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_JOURNAL.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_CHECKPOINT.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_REGISTRY.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_RECONCILIATION.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
@@ -664,6 +665,83 @@ jobs:
           assert registry["automatic_rollback"] is False
           PY
 
+      - name: Smoke-test Hive promotion registry reconciliation
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = {
+              "llm": {
+                  "provider": "test",
+                  "model": "candidate-model",
+                  "reasoning_effort": "high",
+                  "api_key": "RECONCILE_SMOKE_SECRET_MUST_NOT_LEAK",
+              }
+          }
+          target = Path(os.environ["RUNNER_TEMP"]) / "hive-config-reconcile-smoke.json"
+          target.write_text(json.dumps(config), encoding="utf-8")
+          PY
+          python -m tools.ai_model_advisor.cli hive-promotion-reconcile \
+            --registry model-advisor-output/hive-promotion-registry-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-reconcile-smoke.json" \
+            --require-verified \
+            --output model-advisor-output/hive-promotion-reconciliation-smoke.md \
+            --json-output model-advisor-output/hive-promotion-reconciliation-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("model-advisor-output/hive-promotion-reconciliation-smoke.json")
+          raw = path.read_text()
+          report = json.loads(raw)
+          assert report["status"] == "verified"
+          assert report["verified"] is True
+          assert report["verified_route_count"] == 1
+          assert report["drift_count"] == 0
+          assert report["routes"][0]["manual_rollback_ready"] is True
+          assert report["routes"][0]["rollback_target"]["model_id"] == "current-model"
+          assert "RECONCILE_SMOKE_SECRET_MUST_NOT_LEAK" not in raw
+          PY
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = {
+              "llm": {
+                  "provider": "test",
+                  "model": "unexpected-model",
+                  "reasoning_effort": "low",
+              }
+          }
+          target = Path(os.environ["RUNNER_TEMP"]) / "hive-config-reconcile-drift-smoke.json"
+          target.write_text(json.dumps(config), encoding="utf-8")
+          PY
+          set +e
+          python -m tools.ai_model_advisor.cli hive-promotion-reconcile \
+            --registry model-advisor-output/hive-promotion-registry-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-reconcile-drift-smoke.json" \
+            --require-verified \
+            --json-output model-advisor-output/hive-promotion-reconciliation-drift-smoke.json
+          status=$?
+          set -e
+          test "$status" -eq 2
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path("model-advisor-output/hive-promotion-reconciliation-drift-smoke.json").read_text()
+          )
+          assert report["status"] == "drifted"
+          assert report["verified"] is False
+          assert report["drift_count"] == 1
+          assert report["routes"][0]["manual_rollback_ready"] is False
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -694,6 +772,8 @@ jobs:
           cat model-advisor-output/hive-promotion-checkpoint-verify-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-registry-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-reconciliation-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
