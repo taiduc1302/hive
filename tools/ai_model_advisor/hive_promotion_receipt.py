@@ -191,6 +191,7 @@ def _target_matches(
 def build_hive_promotion_receipt(
     preview: dict[str, Any],
     current_config: dict[str, Any],
+    previous_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Verify current Hive config against a reviewed promotion preview.
 
@@ -200,9 +201,16 @@ def build_hive_promotion_receipt(
         raise HivePromotionReceiptError("promotion preview must be a JSON object")
     if not isinstance(current_config, dict):
         raise HivePromotionReceiptError("Hive configuration must be a JSON object")
+    if previous_receipt is not None and not isinstance(previous_receipt, dict):
+        raise HivePromotionReceiptError("previous receipt must be a JSON object")
 
     preview_sha = _canonical_sha256(preview)
     config_sha = _canonical_sha256(current_config)
+    previous_receipt_sha = (
+        _canonical_sha256(previous_receipt)
+        if isinstance(previous_receipt, dict)
+        else None
+    )
 
     try:
         before, after, sections = _validate_preview(preview)
@@ -217,6 +225,7 @@ def build_hive_promotion_receipt(
             "verified_change_id": preview.get("change_id"),
             "preview_sha256": preview_sha,
             "current_config_sha256": config_sha,
+            "previous_receipt_sha256": previous_receipt_sha,
             "sections": [],
         }
 
@@ -278,6 +287,7 @@ def build_hive_promotion_receipt(
         "scope": preview.get("scope"),
         "preview_sha256": preview_sha,
         "current_config_sha256": config_sha,
+        "previous_receipt_sha256": previous_receipt_sha,
         "state": state,
         "sections": observations,
     }
@@ -295,6 +305,7 @@ def build_hive_promotion_receipt(
         "requires_human_review": True,
         "preview_sha256": preview_sha,
         "current_config_sha256": config_sha,
+        "previous_receipt_sha256": previous_receipt_sha,
         "receipt_sha256": _canonical_sha256(receipt_material),
         "expected_before": before,
         "expected_after": after,
@@ -324,6 +335,10 @@ def render_markdown(receipt: dict[str, Any]) -> str:
 
     if receipt.get("receipt_sha256"):
         lines.append(f"- Receipt SHA-256: `{receipt['receipt_sha256']}`")
+    if receipt.get("previous_receipt_sha256"):
+        lines.append(
+            f"- Previous receipt SHA-256: `{receipt['previous_receipt_sha256']}`"
+        )
 
     sections = receipt.get("sections")
     if isinstance(sections, list) and sections:
@@ -367,13 +382,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--promotion-preview", required=True)
     parser.add_argument("--hive-config", required=True)
+    parser.add_argument(
+        "--previous-receipt",
+        help=(
+            "Optional prior verification receipt to hash-link this observation. "
+            "Use the applied receipt when generating rollback evidence."
+        ),
+    )
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output")
     args = parser.parse_args(argv)
 
+    previous_receipt = (
+        _load_json_object(args.previous_receipt, "previous receipt")
+        if args.previous_receipt
+        else None
+    )
     receipt = build_hive_promotion_receipt(
         _load_json_object(args.promotion_preview, "promotion preview"),
         _load_json_object(args.hive_config, "Hive configuration"),
+        previous_receipt=previous_receipt,
     )
     text = (
         json.dumps(receipt, indent=2, ensure_ascii=False) + chr(10)
