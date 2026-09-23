@@ -8,9 +8,11 @@ import pytest
 from tools.ai_model_advisor.hive_promotion_checkpoint import (
     HivePromotionCheckpointError,
     build_hive_promotion_checkpoint,
-    main as checkpoint_main,
     validate_hive_promotion_checkpoint,
     verify_hive_promotion_checkpoint,
+)
+from tools.ai_model_advisor.hive_promotion_checkpoint import (
+    main as checkpoint_main,
 )
 from tools.ai_model_advisor.hive_promotion_gate import build_hive_promotion_gate
 from tools.ai_model_advisor.hive_promotion_journal import (
