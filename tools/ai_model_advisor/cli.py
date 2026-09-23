@@ -36,6 +36,10 @@ from .hive_promotion_receipt import (
     build_hive_promotion_receipt,
     render_markdown as hive_promotion_receipt_markdown,
 )
+from .hive_promotion_reconcile import (
+    build_hive_promotion_reconciliation,
+    render_markdown as hive_promotion_reconcile_markdown,
+)
 from .hive_promotion_registry import (
     build_hive_promotion_registry,
     render_markdown as hive_promotion_registry_markdown,
@@ -510,6 +514,26 @@ def command_hive_promotion_registry(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_reconcile(args: argparse.Namespace) -> int:
+    registry = json.loads(Path(args.registry).read_text(encoding="utf-8"))
+    config = json.loads(Path(args.hive_config).read_text(encoding="utf-8"))
+    if not isinstance(registry, dict):
+        raise ValueError("promotion registry root must be a JSON object")
+    if not isinstance(config, dict):
+        raise ValueError("Hive configuration root must be a JSON object")
+    report = build_hive_promotion_reconciliation(registry, config)
+    markdown = hive_promotion_reconcile_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    if args.require_verified and not report.get("verified"):
+        return 2
+    return 0
+
+
 def command_hive_promotion_rollback(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -881,6 +905,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 2 when any registry blocker is present.",
     )
     hive_promotion_registry.set_defaults(func=command_hive_promotion_registry)
+
+    hive_promotion_reconcile = sub.add_parser("hive-promotion-reconcile")
+    hive_promotion_reconcile.add_argument("--registry", required=True)
+    hive_promotion_reconcile.add_argument("--hive-config", required=True)
+    hive_promotion_reconcile.add_argument("--output")
+    hive_promotion_reconcile.add_argument("--json-output")
+    hive_promotion_reconcile.add_argument("--require-verified", action="store_true")
+    hive_promotion_reconcile.set_defaults(func=command_hive_promotion_reconcile)
 
     hive_promotion_rollback = sub.add_parser("hive-promotion-rollback")
     hive_promotion_rollback.add_argument("--promotion-preview", required=True)
