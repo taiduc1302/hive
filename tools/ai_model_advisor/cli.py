@@ -23,6 +23,11 @@ from .hive_promotion_lifecycle import (
     build_hive_promotion_lifecycle,
     render_markdown as hive_promotion_lifecycle_markdown,
 )
+from .hive_promotion_journal import (
+    append_hive_promotion_journal,
+    build_hive_promotion_journal,
+    render_markdown as hive_promotion_journal_markdown,
+)
 from .hive_promotion_preview import (
     build_hive_promotion_preview,
     render_markdown as hive_promotion_preview_markdown,
@@ -440,6 +445,40 @@ def command_hive_promotion_lifecycle(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_journal(args: argparse.Namespace) -> int:
+    if args.journal_action == "init":
+        preview = json.loads(
+            Path(args.promotion_preview).read_text(encoding="utf-8")
+        )
+        if not isinstance(preview, dict):
+            raise ValueError("promotion preview root must be a JSON object")
+        journal = build_hive_promotion_journal(preview)
+    else:
+        current = json.loads(Path(args.journal).read_text(encoding="utf-8"))
+        if not isinstance(current, dict):
+            raise ValueError("promotion journal root must be a JSON object")
+        artifact = json.loads(Path(args.artifact).read_text(encoding="utf-8"))
+        if not isinstance(artifact, dict):
+            raise ValueError("journal event artifact root must be a JSON object")
+        journal = append_hive_promotion_journal(
+            current,
+            event=args.event,
+            artifact=artifact,
+        )
+
+    markdown = hive_promotion_journal_markdown(journal)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(journal, ensure_ascii=False, indent=2) + "\n",
+        )
+    return 0
+
+
 def command_hive_promotion_rollback(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -769,6 +808,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 2 unless the lifecycle reaches applied_verified",
     )
     hive_promotion_lifecycle.set_defaults(func=command_hive_promotion_lifecycle)
+
+    hive_promotion_journal = sub.add_parser("hive-promotion-journal")
+    journal_sub = hive_promotion_journal.add_subparsers(
+        dest="journal_action",
+        required=True,
+    )
+
+    journal_init = journal_sub.add_parser("init")
+    journal_init.add_argument("--promotion-preview", required=True)
+    journal_init.add_argument("--output")
+    journal_init.add_argument("--json-output")
+    journal_init.set_defaults(func=command_hive_promotion_journal)
+
+    journal_append = journal_sub.add_parser("append")
+    journal_append.add_argument("--journal", required=True)
+    journal_append.add_argument(
+        "--event",
+        choices=["applied_lifecycle", "rollback_audit"],
+        required=True,
+    )
+    journal_append.add_argument("--artifact", required=True)
+    journal_append.add_argument("--output")
+    journal_append.add_argument("--json-output")
+    journal_append.set_defaults(func=command_hive_promotion_journal)
 
     hive_promotion_rollback = sub.add_parser("hive-promotion-rollback")
     hive_promotion_rollback.add_argument("--promotion-preview", required=True)
