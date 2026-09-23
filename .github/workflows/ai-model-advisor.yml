@@ -19,6 +19,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_ROLLBACK.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_JOURNAL.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_CHECKPOINT.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_REGISTRY.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
@@ -630,6 +631,39 @@ jobs:
           assert "journal_sha256" in fields
           PY
 
+      - name: Smoke-test Hive promotion registry
+        shell: bash
+        run: |
+          python -m tools.ai_model_advisor.hive_promotion_checkpoint create \
+            --journal model-advisor-output/hive-promotion-journal-applied-smoke.json \
+            --json-output model-advisor-output/hive-promotion-applied-checkpoint-smoke.json
+          python -m tools.ai_model_advisor.cli hive-promotion-registry \
+            --pair model-advisor-output/hive-promotion-journal-applied-smoke.json \
+              model-advisor-output/hive-promotion-applied-checkpoint-smoke.json \
+            --require-ready \
+            --output model-advisor-output/hive-promotion-registry-smoke.md \
+            --json-output model-advisor-output/hive-promotion-registry-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          registry = json.loads(
+              Path("model-advisor-output/hive-promotion-registry-smoke.json").read_text()
+          )
+          assert registry["status"] == "ready"
+          assert registry["checkpoint_verified_snapshot_count"] == 1
+          assert registry["selected_change_count"] == 1
+          assert len(registry["routes"]) == 1
+          route = registry["routes"][0]
+          assert route["status"] == "current_verified"
+          assert route["current_verified_config"]["model_id"] == "candidate-model"
+          assert route["active_change_id"]
+          assert route["rollback_status"] == "verified"
+          assert route["rollback_target"]["model_id"] == "current-model"
+          assert registry["automatic_config_mutation"] is False
+          assert registry["automatic_rollback"] is False
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -658,6 +692,8 @@ jobs:
           cat model-advisor-output/hive-promotion-journal-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-checkpoint-verify-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-registry-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
