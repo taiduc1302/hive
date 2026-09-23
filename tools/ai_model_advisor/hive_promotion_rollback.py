@@ -310,7 +310,6 @@ def build_hive_promotion_rollback_audit(
             change_id=change_id,
             scope=scope,
             transition=transition,
-            applied_receipt_sha=applied_receipt_sha,
         )
     except HivePromotionRollbackError as exc:
         state = (
@@ -329,6 +328,7 @@ def build_hive_promotion_rollback_audit(
             change_id=change_id,
             scope=scope,
             transition=transition,
+            applied_receipt_sha=applied_receipt_sha,
         )
     except HivePromotionRollbackError as exc:
         state = (
