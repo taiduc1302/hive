@@ -480,7 +480,19 @@ def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
     current_config = json.loads(Path(args.hive_config).read_text(encoding="utf-8"))
     if not isinstance(current_config, dict):
         raise ValueError("Hive configuration root must be a JSON object")
-    receipt = build_hive_promotion_receipt(preview, current_config)
+    previous_receipt = None
+    previous_receipt_path = getattr(args, "previous_receipt", None)
+    if previous_receipt_path:
+        previous_receipt = json.loads(
+            Path(previous_receipt_path).read_text(encoding="utf-8")
+        )
+        if not isinstance(previous_receipt, dict):
+            raise ValueError("previous receipt root must be a JSON object")
+    receipt = build_hive_promotion_receipt(
+        preview,
+        current_config,
+        previous_receipt=previous_receipt,
+    )
     markdown = hive_promotion_receipt_markdown(receipt)
     if args.output:
         _write(args.output, markdown)
@@ -777,6 +789,13 @@ def build_parser() -> argparse.ArgumentParser:
     hive_promotion_receipt = sub.add_parser("hive-promotion-receipt")
     hive_promotion_receipt.add_argument("--promotion-preview", required=True)
     hive_promotion_receipt.add_argument("--hive-config", required=True)
+    hive_promotion_receipt.add_argument(
+        "--previous-receipt",
+        help=(
+            "Optional prior verification receipt to hash-link this observation; "
+            "required for replay-safe rollback evidence"
+        ),
+    )
     hive_promotion_receipt.add_argument(
         "--output",
         help="Optional Markdown Hive promotion verification receipt",

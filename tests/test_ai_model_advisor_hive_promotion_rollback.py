@@ -85,13 +85,8 @@ def _evidence() -> dict:
     }
 
 
-def _applied_lifecycle(preview: dict) -> dict:
-    gate = build_hive_promotion_gate(
-        preview,
-        _capabilities(),
-        _evidence(),
-    )
-    applied_receipt = build_hive_promotion_receipt(
+def _applied_receipt(preview: dict) -> dict:
+    return build_hive_promotion_receipt(
         preview,
         {
             "llm": {
@@ -101,11 +96,19 @@ def _applied_lifecycle(preview: dict) -> dict:
             }
         },
     )
+
+
+def _applied_lifecycle(preview: dict) -> dict:
+    gate = build_hive_promotion_gate(
+        preview,
+        _capabilities(),
+        _evidence(),
+    )
     return build_hive_promotion_lifecycle(
         _review(),
         preview,
         gate,
-        applied_receipt,
+        _applied_receipt(preview),
     )
 
 
@@ -119,6 +122,7 @@ def _rollback_receipt(preview: dict) -> dict:
                 "reasoning_effort": "medium",
             }
         },
+        previous_receipt=_applied_receipt(preview),
     )
 
 
@@ -177,6 +181,7 @@ def test_rollback_audit_reports_rollback_not_applied() -> None:
                 "reasoning_effort": "high",
             }
         },
+        previous_receipt=_applied_receipt(preview),
     )
 
     report = build_hive_promotion_rollback_audit(
@@ -202,6 +207,7 @@ def test_rollback_audit_blocks_drifted_rollback() -> None:
                 "reasoning_effort": "low",
             }
         },
+        previous_receipt=_applied_receipt(preview),
     )
 
     report = build_hive_promotion_rollback_audit(
@@ -227,6 +233,32 @@ def test_rollback_audit_blocks_tampered_applied_lifecycle_link() -> None:
 
     assert report["state"] == "blocked_chain_mismatch"
     assert "promotion_preview_sha256" in report["reason"]
+
+
+def test_rollback_audit_blocks_replayed_pre_application_receipt() -> None:
+    preview = _preview()
+    lifecycle = _applied_lifecycle(preview)
+    stale_receipt = build_hive_promotion_receipt(
+        preview,
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "medium",
+            }
+        },
+    )
+
+    report = build_hive_promotion_rollback_audit(
+        preview,
+        lifecycle,
+        stale_receipt,
+    )
+
+    assert stale_receipt["state"] == "not_applied"
+    assert stale_receipt["previous_receipt_sha256"] is None
+    assert report["state"] == "blocked_stale_rollback_receipt"
+    assert "previous_receipt_sha256" in report["reason"]
 
 
 def test_rollback_audit_blocks_receipt_from_different_change() -> None:

@@ -1,6 +1,6 @@
 # AI Model Advisor: Hive Promotion Rollback Audit
 
-AI Model Advisor v0.26 adds explicit proof for a manual Hive rollback.
+AI Model Advisor v0.27 extends the v0.26 manual rollback proof with replay-safe receipt chaining.
 
 A single post-rollback receipt that says `not_applied` is not enough to prove a rollback happened. The same state also describes a promotion that was never applied.
 
@@ -10,6 +10,11 @@ v0.26 therefore requires two independent facts:
 2. a new promotion receipt linked to the same reviewed preview that proves every affected Hive section now exactly matches the approved before/rollback configuration.
 
 Only that sequence becomes `rolled_back_verified`.
+
+v0.27 adds one more requirement: the rollback receipt must carry
+`previous_receipt_sha256` equal to the exact applied promotion receipt hash recorded
+by the prior `applied_verified` lifecycle. This prevents an older pre-application
+`not_applied` receipt from being replayed later as false rollback evidence.
 
 ## Evidence sequence
 
@@ -49,6 +54,7 @@ It also requires the prior lifecycle to identify the applied promotion receipt t
 - `rollback_not_applied` — the new receipt still proves the approved after-state;
 - `blocked_rollback_drift` — the new receipt matches neither the full before-state nor the full after-state;
 - `blocked_invalid_applied_lifecycle` — no valid prior `applied_verified` lifecycle exists;
+- `blocked_stale_rollback_receipt` — rollback evidence is not hash-linked to the exact applied receipt recorded by the verified lifecycle;
 - `blocked_chain_mismatch` — preview/lifecycle/receipt hashes, IDs, scope, or exact transition data do not belong to the same promotion;
 - `blocked_invalid_preview` — the reviewed Hive preview is malformed or violates the non-mutating contract;
 - `blocked_rollback_receipt_state` — the linked receipt has an unsupported state.
@@ -68,6 +74,12 @@ python -m tools.ai_model_advisor.hive_promotion_rollback \
 Unified Advisor CLI:
 
 ```bash
+python -m tools.ai_model_advisor.cli hive-promotion-receipt \
+  --promotion-preview hive-promotion-preview.json \
+  --hive-config hive-config-after-manual-rollback.json \
+  --previous-receipt hive-promotion-applied-receipt.json \
+  --json-output hive-promotion-rollback-receipt.json
+
 python -m tools.ai_model_advisor.cli hive-promotion-rollback \
   --promotion-preview hive-promotion-preview.json \
   --applied-lifecycle hive-promotion-lifecycle.json \

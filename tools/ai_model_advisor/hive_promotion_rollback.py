@@ -121,7 +121,7 @@ def _validate_applied_lifecycle(
     change_id: str,
     scope: str,
     transition: dict[str, dict[str, str]],
-) -> None:
+) -> str:
     if lifecycle.get("schema_version") != 1:
         raise HivePromotionRollbackError(
             "applied lifecycle schema_version must be 1"
@@ -187,6 +187,7 @@ def _validate_applied_lifecycle(
         raise HivePromotionRollbackError(
             "applied lifecycle must identify the applied promotion receipt"
         )
+    return applied_receipt_sha.strip()
 
 
 def _validate_rollback_receipt(
@@ -197,6 +198,7 @@ def _validate_rollback_receipt(
     change_id: str,
     scope: str,
     transition: dict[str, dict[str, str]],
+    applied_receipt_sha: str,
 ) -> None:
     if receipt.get("schema_version") != 1:
         raise HivePromotionRollbackError(
@@ -239,6 +241,11 @@ def _validate_rollback_receipt(
     if receipt.get("expected_after") != transition["after"]:
         raise HivePromotionRollbackError(
             "rollback receipt expected_after does not match reviewed after state"
+        )
+    if receipt.get("previous_receipt_sha256") != applied_receipt_sha:
+        raise HivePromotionRollbackError(
+            "rollback receipt previous_receipt_sha256 does not match the "
+            "applied receipt recorded by the verified lifecycle"
         )
 
 
@@ -296,7 +303,7 @@ def build_hive_promotion_rollback_audit(
     )
 
     try:
-        _validate_applied_lifecycle(
+        applied_receipt_sha = _validate_applied_lifecycle(
             applied_lifecycle,
             preview_sha=preview_sha,
             category=category,
@@ -321,11 +328,17 @@ def build_hive_promotion_rollback_audit(
             change_id=change_id,
             scope=scope,
             transition=transition,
+            applied_receipt_sha=applied_receipt_sha,
         )
     except HivePromotionRollbackError as exc:
+        state = (
+            "blocked_stale_rollback_receipt"
+            if "previous_receipt_sha256" in str(exc)
+            else "blocked_chain_mismatch"
+        )
         return _blocked(
             base,
-            "blocked_chain_mismatch",
+            state,
             str(exc),
         )
 
