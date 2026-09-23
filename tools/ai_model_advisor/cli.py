@@ -36,6 +36,10 @@ from .hive_promotion_receipt import (
     build_hive_promotion_receipt,
     render_markdown as hive_promotion_receipt_markdown,
 )
+from .hive_promotion_registry import (
+    build_hive_promotion_registry,
+    render_markdown as hive_promotion_registry_markdown,
+)
 from .hive_promotion_rollback import (
     build_hive_promotion_rollback_audit,
     render_markdown as hive_promotion_rollback_markdown,
@@ -479,6 +483,33 @@ def command_hive_promotion_journal(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_registry(args: argparse.Namespace) -> int:
+    snapshots = []
+    for journal_path, checkpoint_path in args.pair:
+        journal = json.loads(Path(journal_path).read_text(encoding="utf-8"))
+        checkpoint = json.loads(Path(checkpoint_path).read_text(encoding="utf-8"))
+        if not isinstance(journal, dict):
+            raise ValueError("promotion journal root must be a JSON object")
+        if not isinstance(checkpoint, dict):
+            raise ValueError("promotion checkpoint root must be a JSON object")
+        snapshots.append((journal, checkpoint))
+
+    registry = build_hive_promotion_registry(snapshots)
+    markdown = hive_promotion_registry_markdown(registry)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(registry, ensure_ascii=False, indent=2) + "\n",
+        )
+    if args.require_ready and registry.get("status") != "ready":
+        return 2
+    return 0
+
+
 def command_hive_promotion_rollback(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -832,6 +863,24 @@ def build_parser() -> argparse.ArgumentParser:
     journal_append.add_argument("--output")
     journal_append.add_argument("--json-output")
     journal_append.set_defaults(func=command_hive_promotion_journal)
+
+    hive_promotion_registry = sub.add_parser("hive-promotion-registry")
+    hive_promotion_registry.add_argument(
+        "--pair",
+        nargs=2,
+        action="append",
+        metavar=("JOURNAL", "CHECKPOINT"),
+        required=True,
+        help="Journal/checkpoint pair. Repeat for additional promotion snapshots.",
+    )
+    hive_promotion_registry.add_argument("--output")
+    hive_promotion_registry.add_argument("--json-output")
+    hive_promotion_registry.add_argument(
+        "--require-ready",
+        action="store_true",
+        help="Exit 2 when any registry blocker is present.",
+    )
+    hive_promotion_registry.set_defaults(func=command_hive_promotion_registry)
 
     hive_promotion_rollback = sub.add_parser("hive-promotion-rollback")
     hive_promotion_rollback.add_argument("--promotion-preview", required=True)
