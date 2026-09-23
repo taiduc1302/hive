@@ -6,6 +6,11 @@ from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
 from .hive_config_preview import build_hive_config_preview
 from .hive_promotion_gate import build_hive_promotion_gate
+from .hive_promotion_journal import (
+    append_hive_promotion_journal,
+    build_hive_promotion_journal,
+    validate_hive_promotion_journal,
+)
 from .hive_promotion_preview import build_hive_promotion_preview
 from .hive_promotion_receipt import build_hive_promotion_receipt
 from .hive_promotion_rollback import build_hive_promotion_rollback_audit
@@ -24,6 +29,9 @@ __all__ = [
     "build_hive_promotion_preview",
     "build_hive_promotion_receipt",
     "build_hive_promotion_rollback_audit",
+    "append_hive_promotion_journal",
+    "build_hive_promotion_journal",
+    "validate_hive_promotion_journal",
     "ModelRegistry",
     "RecommendationEngine",
     "UsageRecord",
@@ -36,4 +44,4 @@ __all__ = [
     "evaluate_promotion_canary",
     "recommend_for_target",
 ]
-__version__ = "0.27.0"
+__version__ = "0.28.0"

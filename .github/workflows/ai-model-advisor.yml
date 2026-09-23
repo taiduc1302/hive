@@ -17,6 +17,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_RECEIPT.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_LIFECYCLE.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_ROLLBACK.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_JOURNAL.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
@@ -539,6 +540,41 @@ jobs:
           assert rollback["artifact_hashes"]["rollback_receipt_sha256"]
           PY
 
+      - name: Smoke-test Hive promotion journal
+        run: |
+          python -m tools.ai_model_advisor.cli hive-promotion-journal init \
+            --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
+            --output model-advisor-output/hive-promotion-journal-preview-smoke.md \
+            --json-output model-advisor-output/hive-promotion-journal-preview-smoke.json
+          python -m tools.ai_model_advisor.cli hive-promotion-journal append \
+            --journal model-advisor-output/hive-promotion-journal-preview-smoke.json \
+            --event applied_lifecycle \
+            --artifact model-advisor-output/hive-promotion-lifecycle-smoke.json \
+            --output model-advisor-output/hive-promotion-journal-applied-smoke.md \
+            --json-output model-advisor-output/hive-promotion-journal-applied-smoke.json
+          python -m tools.ai_model_advisor.cli hive-promotion-journal append \
+            --journal model-advisor-output/hive-promotion-journal-applied-smoke.json \
+            --event rollback_audit \
+            --artifact model-advisor-output/hive-promotion-rollback-smoke.json \
+            --output model-advisor-output/hive-promotion-journal-smoke.md \
+            --json-output model-advisor-output/hive-promotion-journal-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          journal = json.loads(
+              Path("model-advisor-output/hive-promotion-journal-smoke.json").read_text()
+          )
+          assert journal["state"] == "rolled_back_verified"
+          assert len(journal["entries"]) == 3
+          assert journal["entries"][0]["event"] == "promotion_preview"
+          assert journal["entries"][1]["event"] == "applied_lifecycle"
+          assert journal["entries"][2]["event"] == "rollback_audit"
+          assert journal["head_entry_sha256"] == journal["entries"][-1]["entry_sha256"]
+          assert journal["automatic_config_mutation"] is False
+          assert journal["automatic_rollback"] is False
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -563,6 +599,8 @@ jobs:
           cat model-advisor-output/hive-promotion-lifecycle-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-rollback-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-journal-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
