@@ -498,6 +498,7 @@ jobs:
           python -m tools.ai_model_advisor.cli hive-promotion-receipt \
             --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
             --hive-config "$RUNNER_TEMP/hive-config-rollback-smoke.json" \
+            --previous-receipt model-advisor-output/hive-promotion-receipt-smoke.json \
             --output model-advisor-output/hive-promotion-rollback-receipt-smoke.md \
             --json-output model-advisor-output/hive-promotion-rollback-receipt-smoke.json
           python - <<'PY'
@@ -510,6 +511,7 @@ jobs:
           raw = path.read_text()
           receipt = json.loads(raw)
           assert receipt["state"] == "not_applied"
+          assert receipt["previous_receipt_sha256"]
           assert "ROLLBACK_SMOKE_SECRET_MUST_NOT_LEAK" not in raw
           PY
           python -m tools.ai_model_advisor.cli hive-promotion-rollback \
