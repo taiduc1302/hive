@@ -19,14 +19,14 @@ from .hive_promotion_gate import (
     build_hive_promotion_gate,
     render_markdown as hive_promotion_gate_markdown,
 )
-from .hive_promotion_lifecycle import (
-    build_hive_promotion_lifecycle,
-    render_markdown as hive_promotion_lifecycle_markdown,
-)
 from .hive_promotion_journal import (
     append_hive_promotion_journal,
     build_hive_promotion_journal,
     render_markdown as hive_promotion_journal_markdown,
+)
+from .hive_promotion_lifecycle import (
+    build_hive_promotion_lifecycle,
+    render_markdown as hive_promotion_lifecycle_markdown,
 )
 from .hive_promotion_preview import (
     build_hive_promotion_preview,
