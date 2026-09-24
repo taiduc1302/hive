@@ -48,6 +48,10 @@ from .hive_promotion_rollback import (
     build_hive_promotion_rollback_audit,
     render_markdown as hive_promotion_rollback_markdown,
 )
+from .hive_promotion_rollback_plan import (
+    build_hive_promotion_rollback_plan,
+    render_markdown as hive_promotion_rollback_plan_markdown,
+)
 from .hive_promotion_status import (
     build_hive_promotion_status,
     render_markdown as hive_promotion_status_markdown,
@@ -538,6 +542,23 @@ def command_hive_promotion_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_rollback_plan(args: argparse.Namespace) -> int:
+    status = json.loads(Path(args.status).read_text(encoding="utf-8"))
+    if not isinstance(status, dict):
+        raise ValueError("promotion status root must be a JSON object")
+    plan = build_hive_promotion_rollback_plan(status)
+    markdown = hive_promotion_rollback_plan_markdown(plan)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
+    if args.require_ready and not plan.get("ready_for_manual_rollback"):
+        return 2
+    return 0
+
+
 def command_hive_promotion_status(args: argparse.Namespace) -> int:
     snapshots = []
     for journal_path, checkpoint_path in args.pair:
@@ -944,6 +965,15 @@ def build_parser() -> argparse.ArgumentParser:
     hive_promotion_reconcile.add_argument("--json-output")
     hive_promotion_reconcile.add_argument("--require-verified", action="store_true")
     hive_promotion_reconcile.set_defaults(func=command_hive_promotion_reconcile)
+
+    hive_promotion_rollback_plan = sub.add_parser("hive-promotion-rollback-plan")
+    hive_promotion_rollback_plan.add_argument("--status", required=True)
+    hive_promotion_rollback_plan.add_argument("--output")
+    hive_promotion_rollback_plan.add_argument("--json-output")
+    hive_promotion_rollback_plan.add_argument("--require-ready", action="store_true")
+    hive_promotion_rollback_plan.set_defaults(
+        func=command_hive_promotion_rollback_plan
+    )
 
     hive_promotion_status = sub.add_parser("hive-promotion-status")
     hive_promotion_status.add_argument(
