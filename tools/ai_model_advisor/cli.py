@@ -44,6 +44,10 @@ from .hive_promotion_registry import (
     build_hive_promotion_registry,
     render_markdown as hive_promotion_registry_markdown,
 )
+from .hive_promotion_status import (
+    build_hive_promotion_status,
+    render_markdown as hive_promotion_status_markdown,
+)
 from .hive_promotion_rollback import (
     build_hive_promotion_rollback_audit,
     render_markdown as hive_promotion_rollback_markdown,
@@ -534,6 +538,33 @@ def command_hive_promotion_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_status(args: argparse.Namespace) -> int:
+    snapshots = []
+    for journal_path, checkpoint_path in args.pair:
+        journal = json.loads(Path(journal_path).read_text(encoding="utf-8"))
+        checkpoint = json.loads(Path(checkpoint_path).read_text(encoding="utf-8"))
+        if not isinstance(journal, dict):
+            raise ValueError("promotion journal root must be a JSON object")
+        if not isinstance(checkpoint, dict):
+            raise ValueError("promotion checkpoint root must be a JSON object")
+        snapshots.append((journal, checkpoint))
+    config = json.loads(Path(args.hive_config).read_text(encoding="utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("Hive configuration root must be a JSON object")
+
+    report = build_hive_promotion_status(snapshots, config)
+    markdown = hive_promotion_status_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    if args.require_verified and report.get("status") != "verified":
+        return 2
+    return 0
+
+
 def command_hive_promotion_rollback(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -913,6 +944,21 @@ def build_parser() -> argparse.ArgumentParser:
     hive_promotion_reconcile.add_argument("--json-output")
     hive_promotion_reconcile.add_argument("--require-verified", action="store_true")
     hive_promotion_reconcile.set_defaults(func=command_hive_promotion_reconcile)
+
+    hive_promotion_status = sub.add_parser("hive-promotion-status")
+    hive_promotion_status.add_argument(
+        "--pair",
+        nargs=2,
+        action="append",
+        metavar=("JOURNAL", "CHECKPOINT"),
+        required=True,
+        help="Journal/checkpoint pair. Repeat for additional snapshots.",
+    )
+    hive_promotion_status.add_argument("--hive-config", required=True)
+    hive_promotion_status.add_argument("--output")
+    hive_promotion_status.add_argument("--json-output")
+    hive_promotion_status.add_argument("--require-verified", action="store_true")
+    hive_promotion_status.set_defaults(func=command_hive_promotion_status)
 
     hive_promotion_rollback = sub.add_parser("hive-promotion-rollback")
     hive_promotion_rollback.add_argument("--promotion-preview", required=True)
