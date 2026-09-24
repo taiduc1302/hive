@@ -52,6 +52,10 @@ from .hive_promotion_rollback_plan import (
     build_hive_promotion_rollback_plan,
     render_markdown as hive_promotion_rollback_plan_markdown,
 )
+from .hive_promotion_rollback_preflight import (
+    build_hive_promotion_rollback_preflight,
+    render_markdown as hive_promotion_rollback_preflight_markdown,
+)
 from .hive_promotion_status import (
     build_hive_promotion_status,
     render_markdown as hive_promotion_status_markdown,
@@ -559,6 +563,26 @@ def command_hive_promotion_rollback_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_rollback_preflight(args: argparse.Namespace) -> int:
+    plan = json.loads(Path(args.rollback_plan).read_text(encoding="utf-8"))
+    config = json.loads(Path(args.hive_config).read_text(encoding="utf-8"))
+    if not isinstance(plan, dict):
+        raise ValueError("rollback plan root must be a JSON object")
+    if not isinstance(config, dict):
+        raise ValueError("Hive configuration root must be a JSON object")
+    report = build_hive_promotion_rollback_preflight(plan, config)
+    markdown = hive_promotion_rollback_preflight_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(args.json_output, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    if args.require_ready and not report.get("ready_for_manual_edit"):
+        return 2
+    return 0
+
+
 def command_hive_promotion_status(args: argparse.Namespace) -> int:
     snapshots = []
     for journal_path, checkpoint_path in args.pair:
@@ -973,6 +997,21 @@ def build_parser() -> argparse.ArgumentParser:
     hive_promotion_rollback_plan.add_argument("--require-ready", action="store_true")
     hive_promotion_rollback_plan.set_defaults(
         func=command_hive_promotion_rollback_plan
+    )
+
+    hive_promotion_rollback_preflight = sub.add_parser(
+        "hive-promotion-rollback-preflight"
+    )
+    hive_promotion_rollback_preflight.add_argument("--rollback-plan", required=True)
+    hive_promotion_rollback_preflight.add_argument("--hive-config", required=True)
+    hive_promotion_rollback_preflight.add_argument("--output")
+    hive_promotion_rollback_preflight.add_argument("--json-output")
+    hive_promotion_rollback_preflight.add_argument(
+        "--require-ready",
+        action="store_true",
+    )
+    hive_promotion_rollback_preflight.set_defaults(
+        func=command_hive_promotion_rollback_preflight
     )
 
     hive_promotion_status = sub.add_parser("hive-promotion-status")
