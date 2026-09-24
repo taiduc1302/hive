@@ -47,15 +47,15 @@ def _status_and_action(
             "drifted",
             "investigate_live_config_drift",
         )
-    if reconcile_status in {"partial", "blocked_registry"}:
-        return (
-            "attention",
-            "resolve_unverified_routes",
-        )
     if pending_count:
         return (
             "attention",
             "review_pending_promotions",
+        )
+    if reconcile_status in {"partial", "blocked_registry"}:
+        return (
+            "attention",
+            "resolve_unverified_routes",
         )
     if reconciliation.get("verified") is True:
         return (
