@@ -20,8 +20,8 @@ from .hive_promotion_preview import build_hive_promotion_preview
 from .hive_promotion_receipt import build_hive_promotion_receipt
 from .hive_promotion_reconcile import build_hive_promotion_reconciliation
 from .hive_promotion_registry import build_hive_promotion_registry
-from .hive_promotion_status import build_hive_promotion_status
 from .hive_promotion_rollback import build_hive_promotion_rollback_audit
+from .hive_promotion_status import build_hive_promotion_status
 from .promotion_plan import build_promotion_plans
 from .promotion_review import build_promotion_review
 from .recommend import RecommendationEngine
