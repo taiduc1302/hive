@@ -21,6 +21,7 @@ on:
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_CHECKPOINT.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_REGISTRY.md"
       - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_RECONCILIATION.md"
+      - "docs/AI_MODEL_ADVISOR_HIVE_PROMOTION_STATUS.md"
       - "docs/AI_MODEL_ADVISOR_RUNTIME_CAPABILITIES.md"
       - "docs/AI_MODEL_ADVISOR_EXECUTION_TARGETS.md"
       - "docs/AI_MODEL_ADVISOR_ROUTING_PROPOSALS.md"
@@ -742,6 +743,54 @@ jobs:
           assert report["routes"][0]["manual_rollback_ready"] is False
           PY
 
+      - name: Smoke-test Hive promotion operational status
+        shell: bash
+        run: |
+          python -m tools.ai_model_advisor.cli hive-promotion-status \
+            --pair model-advisor-output/hive-promotion-journal-applied-smoke.json \
+              model-advisor-output/hive-promotion-applied-checkpoint-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-reconcile-smoke.json" \
+            --require-verified \
+            --output model-advisor-output/hive-promotion-status-smoke.md \
+            --json-output model-advisor-output/hive-promotion-status-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path("model-advisor-output/hive-promotion-status-smoke.json").read_text()
+          )
+          assert report["status"] == "verified"
+          assert report["operator_action"] == "none"
+          assert report["verified_route_count"] == 1
+          assert report["drift_count"] == 0
+          assert report["manual_rollback_ready_count"] == 1
+          assert report["routes"][0]["manual_rollback_ready"] is True
+          assert report["status_bundle_sha256"]
+          PY
+          set +e
+          python -m tools.ai_model_advisor.cli hive-promotion-status \
+            --pair model-advisor-output/hive-promotion-journal-applied-smoke.json \
+              model-advisor-output/hive-promotion-applied-checkpoint-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-reconcile-drift-smoke.json" \
+            --require-verified \
+            --json-output model-advisor-output/hive-promotion-status-drift-smoke.json
+          status=$?
+          set -e
+          test "$status" -eq 2
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path("model-advisor-output/hive-promotion-status-drift-smoke.json").read_text()
+          )
+          assert report["status"] == "drifted"
+          assert report["operator_action"] == "investigate_live_config_drift"
+          assert report["drift_count"] == 1
+          assert report["manual_rollback_ready_count"] == 0
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -774,6 +823,8 @@ jobs:
           cat model-advisor-output/hive-promotion-registry-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-reconciliation-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-status-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
