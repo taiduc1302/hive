@@ -44,13 +44,13 @@ from .hive_promotion_registry import (
     build_hive_promotion_registry,
     render_markdown as hive_promotion_registry_markdown,
 )
-from .hive_promotion_status import (
-    build_hive_promotion_status,
-    render_markdown as hive_promotion_status_markdown,
-)
 from .hive_promotion_rollback import (
     build_hive_promotion_rollback_audit,
     render_markdown as hive_promotion_rollback_markdown,
+)
+from .hive_promotion_status import (
+    build_hive_promotion_status,
+    render_markdown as hive_promotion_status_markdown,
 )
 from .hive_trace import (
     append_imported_feedback,
