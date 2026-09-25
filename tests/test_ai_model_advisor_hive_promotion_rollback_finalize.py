@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+from argparse import Namespace
 from copy import deepcopy
 
 import pytest
 
+from tools.ai_model_advisor.cli import command_hive_promotion_rollback_finalize
 from tools.ai_model_advisor.hive_promotion_gate import build_hive_promotion_gate
 from tools.ai_model_advisor.hive_promotion_lifecycle import (
     build_hive_promotion_lifecycle,
@@ -234,3 +237,43 @@ def test_finalization_rejects_stale_preflight() -> None:
             stale,
             _rollback_receipt(preview),
         )
+
+
+def test_unified_cli_writes_preflight_bound_finalization(tmp_path) -> None:
+    preview = _preview()
+    lifecycle = _lifecycle(preview)
+    plan = _plan()
+    preflight = _preflight(plan)
+    receipt = _rollback_receipt(preview)
+
+    paths = {}
+    for name, payload in (
+        ("preview", preview),
+        ("lifecycle", lifecycle),
+        ("plan", plan),
+        ("preflight", preflight),
+        ("receipt", receipt),
+    ):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        paths[name] = path
+
+    markdown_path = tmp_path / "finalization.md"
+    json_path = tmp_path / "finalization.json"
+    code = command_hive_promotion_rollback_finalize(
+        Namespace(
+            promotion_preview=str(paths["preview"]),
+            applied_lifecycle=str(paths["lifecycle"]),
+            rollback_plan=str(paths["plan"]),
+            rollback_preflight=str(paths["preflight"]),
+            rollback_receipt=str(paths["receipt"]),
+            output=str(markdown_path),
+            json_output=str(json_path),
+            require_verified=True,
+        )
+    )
+
+    assert code == 0
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+    assert report["rollback_verified_from_fresh_preflight"] is True
+    assert "Hive Rollback Finalization" in markdown_path.read_text(encoding="utf-8")
