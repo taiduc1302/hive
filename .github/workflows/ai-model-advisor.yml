@@ -46,6 +46,9 @@ jobs:
       - name: Run advisor tests
         run: python -m pytest tests/test_ai_model_advisor*.py
 
+      - name: Run Hive reasoning-effort bridge tests
+        run: python -m pytest core/tests/test_config.py
+
       - name: Smoke-test Hive runtime capability probe
         run: |
           mkdir -p model-advisor-output
