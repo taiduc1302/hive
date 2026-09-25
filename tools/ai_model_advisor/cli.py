@@ -48,6 +48,10 @@ from .hive_promotion_rollback import (
     build_hive_promotion_rollback_audit,
     render_markdown as hive_promotion_rollback_markdown,
 )
+from .hive_promotion_rollback_finalize import (
+    build_hive_promotion_rollback_finalization,
+    render_markdown as hive_promotion_rollback_finalize_markdown,
+)
 from .hive_promotion_rollback_plan import (
     build_hive_promotion_rollback_plan,
     render_markdown as hive_promotion_rollback_plan_markdown,
@@ -643,6 +647,46 @@ def command_hive_promotion_rollback(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_promotion_rollback_finalize(args: argparse.Namespace) -> int:
+    preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
+    lifecycle = json.loads(Path(args.applied_lifecycle).read_text(encoding="utf-8"))
+    plan = json.loads(Path(args.rollback_plan).read_text(encoding="utf-8"))
+    preflight = json.loads(Path(args.rollback_preflight).read_text(encoding="utf-8"))
+    receipt = json.loads(Path(args.rollback_receipt).read_text(encoding="utf-8"))
+    for label, payload in (
+        ("promotion preview", preview),
+        ("applied lifecycle", lifecycle),
+        ("rollback plan", plan),
+        ("rollback preflight", preflight),
+        ("rollback receipt", receipt),
+    ):
+        if not isinstance(payload, dict):
+            raise ValueError(f"{label} root must be a JSON object")
+
+    report = build_hive_promotion_rollback_finalization(
+        preview,
+        lifecycle,
+        plan,
+        preflight,
+        receipt,
+    )
+    markdown = hive_promotion_rollback_finalize_markdown(report)
+    if args.output:
+        _write(args.output, markdown)
+    else:
+        print(markdown)
+    if args.json_output:
+        _write(
+            args.json_output,
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        )
+    if args.require_verified and not report.get(
+        "rollback_verified_from_fresh_preflight"
+    ):
+        return 2
+    return 0
+
+
 def command_hive_promotion_receipt(args: argparse.Namespace) -> int:
     preview = json.loads(Path(args.promotion_preview).read_text(encoding="utf-8"))
     if not isinstance(preview, dict):
@@ -1044,6 +1088,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 2 unless the rollback is verified after a prior applied lifecycle",
     )
     hive_promotion_rollback.set_defaults(func=command_hive_promotion_rollback)
+
+    hive_promotion_rollback_finalize = sub.add_parser(
+        "hive-promotion-rollback-finalize"
+    )
+    hive_promotion_rollback_finalize.add_argument("--promotion-preview", required=True)
+    hive_promotion_rollback_finalize.add_argument("--applied-lifecycle", required=True)
+    hive_promotion_rollback_finalize.add_argument("--rollback-plan", required=True)
+    hive_promotion_rollback_finalize.add_argument("--rollback-preflight", required=True)
+    hive_promotion_rollback_finalize.add_argument("--rollback-receipt", required=True)
+    hive_promotion_rollback_finalize.add_argument("--output")
+    hive_promotion_rollback_finalize.add_argument("--json-output")
+    hive_promotion_rollback_finalize.add_argument(
+        "--require-verified",
+        action="store_true",
+    )
+    hive_promotion_rollback_finalize.set_defaults(
+        func=command_hive_promotion_rollback_finalize
+    )
 
     hive_promotion_receipt = sub.add_parser("hive-promotion-receipt")
     hive_promotion_receipt.add_argument("--promotion-preview", required=True)
