@@ -21,6 +21,9 @@ from .hive_promotion_receipt import build_hive_promotion_receipt
 from .hive_promotion_reconcile import build_hive_promotion_reconciliation
 from .hive_promotion_registry import build_hive_promotion_registry
 from .hive_promotion_rollback import build_hive_promotion_rollback_audit
+from .hive_promotion_rollback_finalize import (
+    build_hive_promotion_rollback_finalization,
+)
 from .hive_promotion_rollback_plan import build_hive_promotion_rollback_plan
 from .hive_promotion_rollback_preflight import (
     build_hive_promotion_rollback_preflight,
@@ -49,6 +52,7 @@ __all__ = [
     "build_hive_promotion_registry",
     "build_hive_promotion_status",
     "build_hive_promotion_rollback_audit",
+    "build_hive_promotion_rollback_finalization",
     "build_hive_promotion_rollback_plan",
     "build_hive_promotion_rollback_preflight",
     "build_promotion_plans",
@@ -64,4 +68,4 @@ __all__ = [
     "validate_hive_promotion_journal",
     "verify_hive_promotion_checkpoint",
 ]
-__version__ = "0.34.0"
+__version__ = "0.35.0"
