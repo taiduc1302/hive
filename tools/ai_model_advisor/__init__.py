@@ -68,4 +68,4 @@ __all__ = [
     "validate_hive_promotion_journal",
     "verify_hive_promotion_checkpoint",
 ]
-__version__ = "0.35.0"
+__version__ = "0.36.0"
