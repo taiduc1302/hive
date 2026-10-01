@@ -87,7 +87,9 @@ class TestReasoningEffortConfig:
 
         assert get_worker_llm_extra_kwargs() == {"reasoning_effort": "low"}
 
-    def test_null_reasoning_effort_preserves_provider_default(self, tmp_path, monkeypatch):
+    def test_null_reasoning_effort_preserves_provider_default(
+        self, tmp_path, monkeypatch
+    ):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
             '{"llm":{"provider":"openai","model":"gpt-test","reasoning_effort":null}}',
@@ -98,9 +100,7 @@ class TestReasoningEffortConfig:
         assert get_llm_extra_kwargs() == {}
 
     @pytest.mark.parametrize("value", ["", "   ", 3])
-    def test_invalid_reasoning_effort_is_rejected(
-        self, tmp_path, monkeypatch, value
-    ):
+    def test_invalid_reasoning_effort_is_rejected(self, tmp_path, monkeypatch, value):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
             json.dumps(
@@ -109,7 +109,7 @@ class TestReasoningEffortConfig:
                         "provider": "openai",
                         "model": "gpt-test",
                         "reasoning_effort": value,
-                    }
+                    },
                 }
             ),
             encoding="utf-8",
