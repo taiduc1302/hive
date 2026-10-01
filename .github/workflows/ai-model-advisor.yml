@@ -46,8 +46,16 @@ jobs:
       - name: Run advisor tests
         run: python -m pytest tests/test_ai_model_advisor*.py
 
+      - name: Install uv for Hive bridge tests
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync Hive bridge test dependencies
+        working-directory: core
+        run: uv sync --group dev
+
       - name: Run Hive reasoning-effort bridge tests
-        run: python -m pytest core/tests/test_config.py
+        working-directory: core
+        run: uv run pytest tests/test_config.py
 
       - name: Smoke-test Hive runtime capability probe
         run: |
