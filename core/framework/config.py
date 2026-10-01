@@ -446,20 +446,26 @@ def get_worker_api_base() -> str | None:
     return None
 
 
-def _with_reasoning_effort(llm_section: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
+def _with_reasoning_effort(
+    llm_section: dict[str, Any],
+    base: dict[str, Any],
+) -> dict[str, Any]:
     """Merge an optional config-level reasoning effort into LiteLLM kwargs.
 
     Absence or null preserves the provider default. A configured value must
     be a non-empty string; invalid config fails loudly instead of silently
     degrading to a different reasoning mode.
     """
-    result = dict(base)
-    if "reasoning_effort" not in llm_section or llm_section.get("reasoning_effort") is None:
-        return result
+    if "reasoning_effort" not in llm_section:
+        return base
 
-    effort = llm_section.get("reasoning_effort")
+    effort = llm_section["reasoning_effort"]
+    if effort is None:
+        return base
     if not isinstance(effort, str) or not effort.strip():
         raise ValueError("reasoning_effort must be a non-empty string or null")
+
+    result = dict(base)
     result["reasoning_effort"] = effort.strip()
     return result
 
@@ -505,6 +511,7 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
             base = {"extra_body": extra_body}
 
     return _with_reasoning_effort(worker_llm, base)
+
 
 DEFAULT_MAX_CONTEXT_TOKENS = 32_000
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -955,29 +962,6 @@ def get_api_base() -> str | None:
     return None
 
 
-def _with_reasoning_effort(
-    llm_section: dict[str, Any],
-    kwargs: dict[str, Any],
-) -> dict[str, Any]:
-    """Merge an explicit reasoning_effort config value into provider kwargs.
-
-    The field is intentionally provider-agnostic. Hive only forwards it to
-    LiteLLM; it does not claim that every model supports every effort level.
-    Invalid local configuration is rejected instead of silently dropping the
-    requested control.
-    """
-    if "reasoning_effort" not in llm_section:
-        return kwargs
-
-    effort = llm_section["reasoning_effort"]
-    if not isinstance(effort, str) or not effort.strip():
-        raise ValueError("reasoning_effort must be a non-empty string")
-
-    merged = dict(kwargs)
-    merged["reasoning_effort"] = effort.strip()
-    return merged
-
-
 def get_llm_extra_kwargs() -> dict[str, Any]:
     """Return extra kwargs for LiteLLMProvider.
 
@@ -1022,6 +1006,7 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
             base = {"extra_body": extra_body}
 
     return _with_reasoning_effort(llm, base)
+
 
 # ---------------------------------------------------------------------------
 # RuntimeConfig – shared across agent templates
