@@ -12,8 +12,12 @@ from tools.ai_model_advisor.execution_targets import (
 def test_execution_target_catalog_is_machine_discoverable() -> None:
     catalog = target_catalog()
 
-    assert set(catalog) == {"hive", "provider_api"}
+    assert set(catalog) == {"hive", "hive_agent_loop", "provider_api"}
     assert catalog["hive"]["runner_module"] == "tools.ai_model_advisor.hive_litellm_adapter"
+    assert catalog["hive_agent_loop"]["runner_module"] == (
+        "tools.ai_model_advisor.hive_agent_loop_adapter"
+    )
+    assert catalog["hive_agent_loop"]["execution_modes"] == ["hive_agent_loop"]
     assert catalog["provider_api"]["runner_module"] == (
         "tools.ai_model_advisor.provider_api_adapter"
     )
@@ -63,3 +67,28 @@ def test_target_binding_rules_come_from_profile_contract() -> None:
     )
     assert any("host='hive'" in blocker for blocker in blockers)
     assert any("adapter='hive_litellm'" in blocker for blocker in blockers)
+
+
+def test_agent_loop_target_accepts_only_agent_loop_mode() -> None:
+    profile = profile_for_host("hive_agent_loop")
+    assert configuration_blockers(
+        {
+            "provider": "openai",
+            "model_id": "gpt-6-astra",
+            "effort": "high",
+            "execution_mode": "hive_agent_loop",
+        },
+        profile,
+    ) == []
+    blockers = configuration_blockers(
+        {
+            "provider": "openai",
+            "model_id": "gpt-6-astra",
+            "effort": "high",
+            "execution_mode": "single",
+        },
+        profile,
+    )
+    assert blockers == [
+        "adapter supports execution_mode=hive_agent_loop, not single"
+    ]
