@@ -38,10 +38,17 @@ def test_capability_probe_is_offline_and_marks_single_ready(tmp_path) -> None:
                 "worker_llm.reasoning_effort",
             ],
         },
+        agent_loop_probe=lambda _root: {
+            "importable": True,
+            "agent_loop_class": True,
+            "event_bus_class": True,
+            "lifecycle_events": True,
+        },
     )
 
     assert report["litellm"]["versions_match"] is True
     assert report["transport"]["single_call_evidence_ready"] is True
+    assert report["transport"]["agent_loop_evidence_ready"] is True
     assert report["native_config"]["reasoning_effort_passthrough"] is True
     assert report["controls"]["reasoning_effort"]["native_hive_config_passthrough"] is True
     assert report["controls"]["reasoning_effort"]["config_keys"] == [
@@ -49,6 +56,10 @@ def test_capability_probe_is_offline_and_marks_single_ready(tmp_path) -> None:
         "worker_llm.reasoning_effort",
     ]
     assert report["controls"]["execution_modes"]["single"] == "supported_by_advisor_adapter"
+    assert (
+        report["controls"]["execution_modes"]["hive_agent_loop"]
+        == "supported_by_advisor_adapter"
+    )
     assert (
         report["controls"]["execution_modes"]["subagents"]
         == "host_exists_adapter_not_implemented"
