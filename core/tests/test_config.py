@@ -1,5 +1,6 @@
 """Tests for framework/config.py - Hive configuration loading."""
 
+import json
 import logging
 
 import pytest
@@ -58,7 +59,9 @@ class TestReasoningEffortConfig:
             "reasoning_effort": "xhigh",
         }
 
-    def test_worker_reasoning_effort_merges_with_ollama_context(self, tmp_path, monkeypatch):
+    def test_worker_reasoning_effort_merges_with_ollama_context(
+        self, tmp_path, monkeypatch
+    ):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
             '{"worker_llm":{"provider":"ollama","model":"local","num_ctx":32768,'
@@ -72,7 +75,9 @@ class TestReasoningEffortConfig:
             "reasoning_effort": "medium",
         }
 
-    def test_worker_without_override_inherits_main_reasoning_effort(self, tmp_path, monkeypatch):
+    def test_worker_without_override_inherits_main_reasoning_effort(
+        self, tmp_path, monkeypatch
+    ):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
             '{"llm":{"provider":"openai","model":"gpt-test","reasoning_effort":"low"}}',
@@ -82,18 +87,38 @@ class TestReasoningEffortConfig:
 
         assert get_worker_llm_extra_kwargs() == {"reasoning_effort": "low"}
 
-    @pytest.mark.parametrize("value", ["", "   ", 3, None])
-    def test_invalid_reasoning_effort_is_rejected(self, tmp_path, monkeypatch, value):
+    def test_null_reasoning_effort_preserves_provider_default(self, tmp_path, monkeypatch):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
-            __import__("json").dumps(
-                {"llm": {"provider": "openai", "model": "gpt-test", "reasoning_effort": value}}
+            '{"llm":{"provider":"openai","model":"gpt-test","reasoning_effort":null}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
+
+        assert get_llm_extra_kwargs() == {}
+
+    @pytest.mark.parametrize("value", ["", "   ", 3])
+    def test_invalid_reasoning_effort_is_rejected(
+        self, tmp_path, monkeypatch, value
+    ):
+        config_file = tmp_path / "configuration.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "llm": {
+                        "provider": "openai",
+                        "model": "gpt-test",
+                        "reasoning_effort": value,
+                    }
+                }
             ),
             encoding="utf-8",
         )
         monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
 
-        with pytest.raises(ValueError, match="reasoning_effort must be a non-empty string"):
+        with pytest.raises(
+            ValueError, match="reasoning_effort must be a non-empty string or null"
+        ):
             get_llm_extra_kwargs()
 
 
