@@ -24,6 +24,12 @@ The daily GitHub Action persists a compact fingerprint baseline in GitHub Action
 
 If an official source temporarily fails to load, its previous hash is preserved. A transient network failure therefore does not erase history and create a false change on the following run.
 
+## Canary evidence integrity
+
+Promotion-canary evaluation uses only exact matched task IDs from the dedicated fresh canary feedback file. A task is excluded when either exact configuration has duplicate attempts for that task ID, and one-sided attempts are reported as incomplete. The evaluator never guesses which retry should count as the canary result.
+
+This keeps fresh canary evidence aligned with the controlled experiment evaluator, which also excludes ambiguous duplicate attempts rather than averaging or last-write-wins selection.
+
 ## Privacy boundary
 
 There is no hidden API in this project for reading a user's entire ChatGPT profile/history. The advisor analyzes only data explicitly available to it: a supplied ChatGPT export, generic activity JSON, GitHub events, explicitly authorized sources, or local Hive telemetry that the user deliberately points the importer at.
