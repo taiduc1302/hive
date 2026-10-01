@@ -75,6 +75,48 @@ def _probe_hive_transport(repo_root: Path) -> dict[str, Any]:
     }
 
 
+def _probe_agent_loop_runtime(repo_root: Path) -> dict[str, Any]:
+    """Check whether the real Hive AgentLoop lifecycle is importable offline."""
+    core_dir = repo_root / "core"
+    core_text = str(core_dir)
+    if core_text not in sys.path:
+        sys.path.insert(0, core_text)
+
+    try:
+        from framework.agent_loop.agent_loop import AgentLoop
+        from framework.agent_loop.internals.types import LoopConfig
+        from framework.agent_loop.types import AgentContext, AgentSpec
+        from framework.host.event_bus import EventBus, EventType
+    except Exception as exc:  # noqa: BLE001 - capability probe reports instead of crashing
+        return {
+            "importable": False,
+            "agent_loop_class": False,
+            "event_bus_class": False,
+            "lifecycle_events": False,
+            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+        }
+
+    lifecycle_events = all(
+        hasattr(EventType, name)
+        for name in (
+            "NODE_LOOP_STARTED",
+            "NODE_LOOP_COMPLETED",
+            "LLM_TURN_COMPLETE",
+            "LLM_TEXT_DELTA",
+            "JUDGE_VERDICT",
+        )
+    )
+    return {
+        "importable": True,
+        "agent_loop_class": callable(AgentLoop),
+        "loop_config_class": callable(LoopConfig),
+        "agent_context_class": callable(AgentContext),
+        "agent_spec_class": callable(AgentSpec),
+        "event_bus_class": callable(EventBus),
+        "lifecycle_events": lifecycle_events,
+    }
+
+
 def _probe_native_config_controls(repo_root: Path) -> dict[str, Any]:
     """Prove native Hive config passthrough without importing the full framework package."""
     import importlib.util
@@ -139,6 +181,7 @@ def build_capability_report(
     installed_version_getter: Callable[[], str | None] | None = None,
     transport_probe: Callable[[Path], dict[str, Any]] | None = None,
     config_probe: Callable[[Path], dict[str, Any]] | None = None,
+    agent_loop_probe: Callable[[Path], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Describe controls the current Hive host can prove without provider calls."""
     root = (repo_root or _repo_root()).resolve()
@@ -146,10 +189,17 @@ def build_capability_report(
     installed = (installed_version_getter or _installed_litellm_version)()
     transport = (transport_probe or _probe_hive_transport)(root)
     native_config = (config_probe or _probe_native_config_controls)(root)
+    agent_loop = (agent_loop_probe or _probe_agent_loop_runtime)(root)
 
     wire_capture = bool(transport.get("post_transform_capture"))
     provider_class = bool(transport.get("provider_class"))
     single_ready = provider_class and wire_capture
+    agent_loop_ready = (
+        single_ready
+        and bool(agent_loop.get("agent_loop_class"))
+        and bool(agent_loop.get("event_bus_class"))
+        and bool(agent_loop.get("lifecycle_events"))
+    )
 
     warnings: list[str] = []
     if pin is None:
@@ -168,6 +218,11 @@ def build_capability_report(
             "Native Hive configuration.json reasoning_effort passthrough is unavailable; "
             "queen/worker sessions cannot apply Advisor effort recommendations through config."
         )
+    if not agent_loop_ready:
+        warnings.append(
+            "Hive AgentLoop lifecycle evidence is unavailable in this Python environment; "
+            "hive_agent_loop experiments fail closed until core dependencies are installed."
+        )
 
     return {
         "schema_version": 1,
@@ -182,7 +237,9 @@ def build_capability_report(
             "name": "hive_litellm",
             **transport,
             "single_call_evidence_ready": single_ready,
+            "agent_loop_evidence_ready": agent_loop_ready,
         },
+        "agent_loop": agent_loop,
         "native_config": native_config,
         "controls": {
             "model": {
@@ -198,7 +255,7 @@ def build_capability_report(
             },
             "execution_modes": {
                 "single": "supported_by_advisor_adapter",
-                "hive_agent_loop": "host_exists_adapter_not_implemented",
+                "hive_agent_loop": "supported_by_advisor_adapter",
                 "dynamic_workflow": "host_exists_adapter_not_implemented",
                 "subagents": "host_exists_adapter_not_implemented",
                 "chatgpt_work": "external_host_not_hive",
@@ -233,6 +290,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Hive LiteLLM transport importable: **{bool(transport.get('importable'))}**",
         f"- Post-transform request capture: **{bool(transport.get('post_transform_capture'))}**",
         f"- Single-call evidence ready: **{bool(transport.get('single_call_evidence_ready'))}**",
+        f"- AgentLoop evidence ready: **{bool(transport.get('agent_loop_evidence_ready'))}**",
         f"- Native config reasoning-effort passthrough: **{bool(native_config.get('reasoning_effort_passthrough'))}**",
         "",
         "## Execution controls",
