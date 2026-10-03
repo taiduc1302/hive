@@ -32,9 +32,7 @@ def _write(path: str | Path | None, text: str) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Generate recommendations constrained to an executable Advisor target."
-    )
+    parser = argparse.ArgumentParser(description="Generate recommendations constrained to an executable Advisor target.")
     parser.add_argument("--profile", required=True, help="Workload profile JSON")
     parser.add_argument(
         "--target",

@@ -58,13 +58,9 @@ class UsageRecord:
             if cache_read > self.input_tokens:
                 raise ValueError("cached_tokens must be <= input_tokens when both are provided")
             if cache_write > self.input_tokens:
-                raise ValueError(
-                    "cache_creation_tokens must be <= input_tokens when both are provided"
-                )
+                raise ValueError("cache_creation_tokens must be <= input_tokens when both are provided")
             if cache_read + cache_write > self.input_tokens:
-                raise ValueError(
-                    "cached_tokens + cache_creation_tokens must be <= input_tokens"
-                )
+                raise ValueError("cached_tokens + cache_creation_tokens must be <= input_tokens")
         if self.credits is not None and self.credits < 0:
             raise ValueError("credits must be >= 0 when provided")
 
@@ -140,14 +136,8 @@ class FeedbackStore:
         model_records = tuple(record for record in self.records if record.model_id == model_id)
 
         if task_category:
-            category_records = tuple(
-                record for record in model_records if record.task_category == task_category
-            )
-            exact_category = tuple(
-                record
-                for record in category_records
-                if record.effort == effort and record.execution_mode == execution_mode
-            )
+            category_records = tuple(record for record in model_records if record.task_category == task_category)
+            exact_category = tuple(record for record in category_records if record.effort == effort and record.execution_mode == execution_mode)
             if len(exact_category) >= EXACT_FEEDBACK_MIN:
                 return exact_category, "exact"
             if len(category_records) >= CROSS_CONFIG_FEEDBACK_MIN:
@@ -156,22 +146,14 @@ class FeedbackStore:
             # Backward compatibility for feedback captured before categories
             # existed. Never borrow evidence from a different named category.
             untagged = tuple(record for record in model_records if record.task_category is None)
-            exact_untagged = tuple(
-                record
-                for record in untagged
-                if record.effort == effort and record.execution_mode == execution_mode
-            )
+            exact_untagged = tuple(record for record in untagged if record.effort == effort and record.execution_mode == execution_mode)
             if len(exact_untagged) >= EXACT_FEEDBACK_MIN:
                 return exact_untagged, "exact"
             if len(untagged) >= CROSS_CONFIG_FEEDBACK_MIN:
                 return untagged, "cross_config"
             return exact_category or exact_untagged, "below_threshold"
 
-        exact = tuple(
-            record
-            for record in model_records
-            if record.effort == effort and record.execution_mode == execution_mode
-        )
+        exact = tuple(record for record in model_records if record.effort == effort and record.execution_mode == execution_mode)
         if len(exact) >= EXACT_FEEDBACK_MIN:
             return exact, "exact"
         if len(model_records) >= CROSS_CONFIG_FEEDBACK_MIN:
@@ -277,11 +259,7 @@ class FeedbackStore:
                 continue
 
             metric_scores: list[tuple[float, float]] = []
-            candidate_latency = [
-                record.latency_seconds
-                for record in candidate_records
-                if record.latency_seconds is not None
-            ]
+            candidate_latency = [record.latency_seconds for record in candidate_records if record.latency_seconds is not None]
             peer_latency = [record.latency_seconds for record in peers if record.latency_seconds is not None]
             if candidate_latency and peer_latency and latency_weight > 0:
                 reference = median(peer_latency)
