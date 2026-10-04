@@ -15,6 +15,7 @@ from .experiment_run_cli import main as experiment_run_main
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
 from .hive_history import history_import_markdown, import_hive_history
+from .hive_config_preview import main as hive_config_preview_main
 from .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
@@ -296,6 +297,22 @@ def command_promotion_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hive_config_preview(args: argparse.Namespace) -> int:
+    forwarded = [
+        "--recommendation",
+        args.recommendation,
+        "--index",
+        str(args.index),
+        "--scope",
+        args.scope,
+    ]
+    if args.json:
+        forwarded.append("--json")
+    if args.output:
+        forwarded.extend(["--output", args.output])
+    return hive_config_preview_main(forwarded)
+
+
 def command_feedback_import_hive(args: argparse.Namespace) -> int:
     registry = ModelRegistry(args.registry)
     report = import_hive_trace(
@@ -511,6 +528,17 @@ def build_parser() -> argparse.ArgumentParser:
     promotion_plan.add_argument("--output", help="Optional Markdown promotion/canary plan")
     promotion_plan.add_argument("--json-output")
     promotion_plan.set_defaults(func=command_promotion_plan)
+
+    hive_preview = sub.add_parser(
+        "hive-config-preview",
+        help="Preview a non-mutating Hive reasoning-effort config patch",
+    )
+    hive_preview.add_argument("--recommendation", required=True, help="Advisor recommendation JSON")
+    hive_preview.add_argument("--index", type=int, default=0, help="Recommendation index (default: 0)")
+    hive_preview.add_argument("--scope", choices=("queen", "worker", "both"), default="queen")
+    hive_preview.add_argument("--json", action="store_true", help="Emit structured JSON instead of Markdown")
+    hive_preview.add_argument("--output", help="Optional output path")
+    hive_preview.set_defaults(func=command_hive_config_preview)
 
     hive_import = sub.add_parser("feedback-import-hive")
     hive_import.add_argument("--events", required=True, help="Hive session events.jsonl")
