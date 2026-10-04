@@ -61,8 +61,7 @@ class TestReasoningEffortConfig:
     def test_worker_reasoning_effort_merges_with_ollama_context(self, tmp_path, monkeypatch):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
-            '{"worker_llm":{"provider":"ollama","model":"local","num_ctx":32768,'
-            '"reasoning_effort":"medium"}}',
+            '{"worker_llm":{"provider":"ollama","model":"local","num_ctx":32768,"reasoning_effort":"medium"}}',
             encoding="utf-8",
         )
         monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
@@ -100,8 +99,7 @@ class TestReasoningEffortConfig:
     def test_worker_missing_subscription_token_keeps_ollama_fallback(self, tmp_path, monkeypatch):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
-            '{"worker_llm":{"provider":"ollama","model":"local","use_claude_code_subscription":true,'
-            '"reasoning_effort":"medium","num_ctx":24576}}',
+            '{"worker_llm":{"provider":"ollama","model":"local","use_claude_code_subscription":true,"reasoning_effort":"medium","num_ctx":24576}}',
             encoding="utf-8",
         )
         monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
