@@ -14,8 +14,8 @@ from .experiment_plan import build_experiment_plan, experiment_plan_markdown
 from .experiment_run_cli import main as experiment_run_main
 from .feedback import FeedbackStore, UsageRecord
 from .feedback_report import build_feedback_audit, feedback_audit_markdown
-from .hive_history import history_import_markdown, import_hive_history
 from .hive_config_preview import main as hive_config_preview_main
+from .hive_history import history_import_markdown, import_hive_history
 from .hive_trace import (
     append_imported_feedback,
     import_hive_trace,
