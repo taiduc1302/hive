@@ -86,15 +86,17 @@ This is separate from the experiment adapter above. The experiment adapter const
 Generate a non-mutating merge-patch preview from an Advisor recommendation JSON:
 
 ```bash
-python -m tools.ai_model_advisor.hive_config_preview \
+python -m tools.ai_model_advisor.cli hive-config-preview \
   --recommendation model-advisor-output/recommendation.json \
   --scope queen
 
-python -m tools.ai_model_advisor.hive_config_preview \
+python -m tools.ai_model_advisor.cli hive-config-preview \
   --recommendation model-advisor-output/recommendation.json \
   --scope both \
   --json
 ```
+
+The standalone `python -m tools.ai_model_advisor.hive_config_preview` entrypoint remains equivalent.
 
 Scopes are `queen`, `worker`, or `both`.
 
