@@ -71,10 +71,7 @@ def recommendation_markdown(
             ]
         )
         if rec.raw_empirical_adjustment != rec.empirical_adjustment:
-            lines.append(
-                f"- Empirical cap: raw {rec.raw_empirical_adjustment:+.3f} was capped to "
-                f"{rec.empirical_adjustment:+.3f} before ranking"
-            )
+            lines.append(f"- Empirical cap: raw {rec.raw_empirical_adjustment:+.3f} was capped to {rec.empirical_adjustment:+.3f} before ranking")
         if rec.tradeoffs:
             lines.append("- Trade-offs: " + "; ".join(rec.tradeoffs))
         lines.append("")

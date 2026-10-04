@@ -110,9 +110,7 @@ def target_catalog_markdown() -> str:
 def profile_for_host(host: str) -> ExecutionTargetProfile:
     profile = _BY_HOST.get(host)
     if profile is None:
-        raise ExecutionTargetCatalogError(
-            f"Unsupported execution target {host!r}; supported targets: {', '.join(sorted(_BY_HOST))}"
-        )
+        raise ExecutionTargetCatalogError(f"Unsupported execution target {host!r}; supported targets: {', '.join(sorted(_BY_HOST))}")
     return profile
 
 
@@ -134,17 +132,12 @@ def target_binding_blockers(
 
     blockers: list[str] = []
     if target.get("host") != profile.host:
-        blockers.append(
-            f"plan is bound to host={target.get('host')!r}, not {profile.host!r}"
-        )
+        blockers.append(f"plan is bound to host={target.get('host')!r}, not {profile.host!r}")
     if target.get("adapter") != profile.adapter:
-        blockers.append(
-            f"plan is bound to adapter={target.get('adapter')!r}, not {profile.adapter!r}"
-        )
+        blockers.append(f"plan is bound to adapter={target.get('adapter')!r}, not {profile.adapter!r}")
     if target.get("adapter_contract_version") != profile.adapter_contract_version:
         blockers.append(
-            "plan uses unsupported adapter contract version "
-            f"{target.get('adapter_contract_version')!r}; expected {profile.adapter_contract_version}"
+            f"plan uses unsupported adapter contract version {target.get('adapter_contract_version')!r}; expected {profile.adapter_contract_version}"
         )
     return blockers
 
@@ -160,14 +153,9 @@ def configuration_blockers(
 
     blockers: list[str] = []
     if provider not in profile.supported_providers:
-        blockers.append(
-            f"adapter supports {'/'.join(profile.supported_providers)}, not {provider or 'missing'}"
-        )
+        blockers.append(f"adapter supports {'/'.join(profile.supported_providers)}, not {provider or 'missing'}")
     if execution_mode not in profile.execution_modes:
-        blockers.append(
-            f"adapter supports execution_mode={','.join(profile.execution_modes)}, "
-            f"not {execution_mode or 'missing'}"
-        )
+        blockers.append(f"adapter supports execution_mode={','.join(profile.execution_modes)}, not {execution_mode or 'missing'}")
     if not model_id:
         blockers.append("model_id is missing")
     if not effort:
@@ -176,9 +164,7 @@ def configuration_blockers(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="List the AI Model Advisor execution-target capability catalog."
-    )
+    parser = argparse.ArgumentParser(description="List the AI Model Advisor execution-target capability catalog.")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")
     return parser
 

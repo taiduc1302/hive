@@ -35,34 +35,16 @@ def build_feedback_audit(store: FeedbackStore) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for (category, model_id, effort, execution_mode), records in sorted(grouped.items()):
         outcomes = Counter(record.outcome for record in records)
-        latencies = [
-            float(record.latency_seconds)
-            for record in records
-            if record.latency_seconds is not None
-        ]
+        latencies = [float(record.latency_seconds) for record in records if record.latency_seconds is not None]
         costs = [float(record.cost_usd) for record in records if record.cost_usd is not None]
-        input_tokens = [
-            float(record.input_tokens)
-            for record in records
-            if record.input_tokens is not None
-        ]
-        output_tokens = [
-            float(record.output_tokens)
-            for record in records
-            if record.output_tokens is not None
-        ]
+        input_tokens = [float(record.input_tokens) for record in records if record.input_tokens is not None]
+        output_tokens = [float(record.output_tokens) for record in records if record.output_tokens is not None]
         cache_read_ratios = [
             float(record.cached_tokens) / float(record.input_tokens)
             for record in records
-            if record.cached_tokens is not None
-            and record.input_tokens is not None
-            and record.input_tokens > 0
+            if record.cached_tokens is not None and record.input_tokens is not None and record.input_tokens > 0
         ]
-        cache_creation_tokens = [
-            float(record.cache_creation_tokens)
-            for record in records
-            if record.cache_creation_tokens is not None
-        ]
+        cache_creation_tokens = [float(record.cache_creation_tokens) for record in records if record.cache_creation_tokens is not None]
         credits = [float(record.credits) for record in records if record.credits is not None]
         task_ids = {record.task_id for record in records if record.task_id}
         source_ids = {record.source_id for record in records if record.source_id}
@@ -214,11 +196,7 @@ def feedback_audit_markdown(audit: dict[str, Any]) -> str:
             if row["median_cache_creation_tokens"] is not None
             else "no cache-write telemetry"
         )
-        credits = (
-            f"median Hive credits {row['median_credits']:.4f}"
-            if row["median_credits"] is not None
-            else "no Hive-credit telemetry"
-        )
+        credits = f"median Hive credits {row['median_credits']:.4f}" if row["median_credits"] is not None else "no Hive-credit telemetry"
         lines.append(
             f"- **{row['category']} / {row['model_id']} / {row['effort']} / {row['execution_mode']}**: "
             f"avg retries {row['average_retries']:.3f}; {latency}; {cost}; {tokens}; "
