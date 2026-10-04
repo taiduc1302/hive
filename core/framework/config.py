@@ -459,7 +459,7 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
             base = {
                 "extra_headers": {"authorization": f"Bearer {api_key}"},
             }
-    elif worker_llm.get("use_codex_subscription"):
+    if not base and worker_llm.get("use_codex_subscription"):
         api_key = get_worker_api_key()
         if api_key:
             headers: dict[str, str] = {
@@ -479,9 +479,9 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
                 "store": False,
                 "allowed_openai_params": ["store"],
             }
-    elif worker_llm.get("provider") == "ollama":
+    if not base and worker_llm.get("provider") == "ollama":
         base = {"num_ctx": worker_llm.get("num_ctx", 16384)}
-    else:
+    if not base:
         extra_body = worker_llm.get("extra_body")
         if isinstance(extra_body, dict) and extra_body:
             base = {"extra_body": extra_body}
@@ -975,7 +975,7 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
             base = {
                 "extra_headers": {"authorization": f"Bearer {api_key}"},
             }
-    elif llm.get("use_codex_subscription"):
+    if not base and llm.get("use_codex_subscription"):
         api_key = get_api_key()
         if api_key:
             headers: dict[str, str] = {
@@ -995,9 +995,9 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
                 "store": False,
                 "allowed_openai_params": ["store"],
             }
-    elif llm.get("provider") == "ollama":
+    if not base and llm.get("provider") == "ollama":
         base = {"num_ctx": llm.get("num_ctx", 16384)}
-    else:
+    if not base:
         extra_body = llm.get("extra_body")
         if isinstance(extra_body, dict) and extra_body:
             base = {"extra_body": extra_body}
