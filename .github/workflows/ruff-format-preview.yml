@@ -1,0 +1,17 @@
+name: Ruff Format Preview
+
+on:
+  push:
+    branches:
+      - scratch/ruff-format-preview
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Sync core dev dependencies
+        run: uv sync --project core --group dev
+      - name: Show Ruff format diff
+        run: uv run --project core ruff format --diff core/tests/test_config.py
