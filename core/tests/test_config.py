@@ -82,6 +82,36 @@ class TestReasoningEffortConfig:
 
         assert get_worker_llm_extra_kwargs() == {"reasoning_effort": "low"}
 
+    def test_main_missing_subscription_token_keeps_extra_body_fallback(self, tmp_path, monkeypatch):
+        config_file = tmp_path / "configuration.json"
+        config_file.write_text(
+            '{"llm":{"provider":"openai","model":"gpt-test","use_claude_code_subscription":true,'
+            '"reasoning_effort":"high","extra_body":{"trace":"fallback"}}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
+        monkeypatch.setattr("framework.config.get_api_key", lambda: None)
+
+        assert get_llm_extra_kwargs() == {
+            "extra_body": {"trace": "fallback"},
+            "reasoning_effort": "high",
+        }
+
+    def test_worker_missing_subscription_token_keeps_ollama_fallback(self, tmp_path, monkeypatch):
+        config_file = tmp_path / "configuration.json"
+        config_file.write_text(
+            '{"worker_llm":{"provider":"ollama","model":"local","use_claude_code_subscription":true,'
+            '"reasoning_effort":"medium","num_ctx":24576}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
+        monkeypatch.setattr("framework.config.get_worker_api_key", lambda: None)
+
+        assert get_worker_llm_extra_kwargs() == {
+            "num_ctx": 24576,
+            "reasoning_effort": "medium",
+        }
+
     def test_null_reasoning_effort_preserves_provider_default(self, tmp_path, monkeypatch):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
