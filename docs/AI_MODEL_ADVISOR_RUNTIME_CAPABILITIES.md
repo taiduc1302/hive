@@ -19,13 +19,16 @@ The probe performs **no provider/network call** and requires no API credentials.
 - the LiteLLM version installed in the Python environment;
 - whether Hive's `LiteLLMProvider` transport imports successfully;
 - whether Hive exposes the post-transform request capture used by the Advisor's fail-closed wire verification;
-- whether the built-in Advisor adapter is ready to collect evidence for `execution_mode=single`.
+- whether the built-in Advisor adapter is ready to collect evidence for `execution_mode=single`;
+- whether native Hive `configuration.json` can pass `reasoning_effort` into normal queen and worker LiteLLM providers.
 
 The current Hive repository pins `litellm==1.83.4` in `core/pyproject.toml`. The probe reports a warning if the installed runtime differs from the repository pin, because benchmark evidence must describe the runtime that actually executed the request.
 
 ## Capability states
 
 The probe deliberately distinguishes host capability from Advisor adapter coverage.
+
+For reasoning effort it now reports two separate facts: post-transform wire proof for the controlled experiment adapter, and native config passthrough via `llm.reasoning_effort` / `worker_llm.reasoning_effort` for ordinary Hive sessions.
 
 - `single`: supported by the current Hive LiteLLM Advisor adapter.
 - `hive_agent_loop`, `dynamic_workflow`, `subagents`: Hive has related host machinery, but the Advisor does not yet claim those execution modes because there is no dedicated evidence-producing adapter for them.
