@@ -1,0 +1,17 @@
+name: Advisor CLI Format Check
+
+on:
+  push:
+    branches:
+      - feature/ai-model-advisor-v0.19.1-cli
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Sync locked formatter
+        run: uv sync --project core --group dev
+      - name: Check central Advisor CLI format
+        run: uv run --project core ruff format --check tools/ai_model_advisor/cli.py
