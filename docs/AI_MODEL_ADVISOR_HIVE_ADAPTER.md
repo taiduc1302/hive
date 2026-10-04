@@ -77,7 +77,7 @@ The following keys are now forwarded through Hive's existing `RuntimeConfig.extr
 - `llm.reasoning_effort` for queen/default sessions;
 - `worker_llm.reasoning_effort` for worker sessions.
 
-Hive does not translate the value or silently downgrade it. The value must be a non-empty string; model/provider compatibility remains the responsibility of the installed LiteLLM/provider stack.
+Hive normalizes a non-null value and passes it into `LiteLLMProvider`; this proves configuration intent, not applied provider behavior. LiteLLM/provider filtering can still drop an unsupported parameter, so wire-level effort must be verified separately when trustworthy experiment evidence is required. The controlled experiment adapter above provides that fail-closed post-transform proof.
 
 This is separate from the experiment adapter above. The experiment adapter constructs a dedicated single-call provider directly. The native config bridge applies to ordinary Hive runtime configuration.
 
