@@ -56,6 +56,8 @@ def test_hive_experiment_preflight_accepts_supported_single_pair() -> None:
     assert report["target_bound"] is False
     assert report["sides"]["A"]["ready"] is True
     assert report["sides"]["B"]["ready"] is True
+    assert report["sides"]["A"]["catalog_ready"] is True
+    assert report["sides"]["B"]["catalog_ready"] is True
     assert report["blockers"] == []
 
 
@@ -152,3 +154,50 @@ def test_hive_experiment_preflight_markdown_shows_blocked_side() -> None:
     assert "Ready for Hive adapter: **no**" in markdown
     assert "dynamic_workflow" in markdown
     assert "post-transform request body" in markdown
+
+
+def test_hive_experiment_preflight_blocks_unknown_model_before_provider_call() -> None:
+    plan = _plan()
+    plan["categories"][0]["pairs"][0]["primary"]["model_id"] = "gpt-unknown-test-model"
+
+    report = evaluate_hive_experiment_preflight(
+        plan,
+        "coding-model-01",
+        capability_report=_capabilities(),
+    )
+
+    assert report["ready"] is False
+    assert report["sides"]["A"]["catalog_ready"] is False
+    assert any("does not recognize openai/gpt-unknown-test-model" in blocker for blocker in report["blockers"])
+    assert report["catalog"]["network_calls_performed"] is False
+    assert report["catalog"]["runtime_support_proven"] is False
+
+
+def test_hive_experiment_preflight_blocks_unsupported_explicit_effort() -> None:
+    plan = _plan()
+    plan["categories"][0]["pairs"][0]["primary"]["effort"] = "unsupported-test-effort"
+
+    report = evaluate_hive_experiment_preflight(
+        plan,
+        "coding-model-01",
+        capability_report=_capabilities(),
+    )
+
+    assert report["ready"] is False
+    assert report["sides"]["A"]["catalog_ready"] is False
+    assert any("unsupported-test-effort" in blocker for blocker in report["blockers"])
+
+
+def test_hive_experiment_preflight_allows_provider_default_effort() -> None:
+    plan = _plan()
+    plan["categories"][0]["pairs"][0]["primary"]["effort"] = "default"
+
+    report = evaluate_hive_experiment_preflight(
+        plan,
+        "coding-model-01",
+        capability_report=_capabilities(),
+    )
+
+    assert report["ready"] is True
+    assert report["sides"]["A"]["catalog_ready"] is True
+    assert report["sides"]["A"]["catalog_blockers"] == []
