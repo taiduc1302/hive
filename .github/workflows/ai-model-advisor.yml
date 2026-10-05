@@ -922,7 +922,7 @@ jobs:
                       "llm": {
                           "provider": "test",
                           "model": "current-model",
-                          "reasoning_effort": "medium",
+                          "reasoning_effort": "high",
                       }
                   }
               ),
