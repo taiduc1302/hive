@@ -883,6 +883,97 @@ jobs:
           assert report["merge_patch"] == {}
           PY
 
+      - name: Smoke-test fresh-preflight rollback journal closure
+        shell: bash
+        run: |
+          python -m tools.ai_model_advisor.cli hive-promotion-rollback-finalize \
+            --promotion-preview model-advisor-output/hive-promotion-preview-smoke.json \
+            --applied-lifecycle model-advisor-output/hive-promotion-lifecycle-smoke.json \
+            --rollback-plan model-advisor-output/hive-promotion-rollback-plan-smoke.json \
+            --rollback-preflight model-advisor-output/hive-promotion-rollback-preflight-smoke.json \
+            --rollback-receipt model-advisor-output/hive-promotion-rollback-receipt-smoke.json \
+            --require-verified \
+            --output model-advisor-output/hive-promotion-rollback-finalization-smoke.md \
+            --json-output model-advisor-output/hive-promotion-rollback-finalization-smoke.json
+          python -m tools.ai_model_advisor.cli hive-promotion-journal append \
+            --journal model-advisor-output/hive-promotion-journal-smoke.json \
+            --event rollback_finalization \
+            --artifact model-advisor-output/hive-promotion-rollback-finalization-smoke.json \
+            --output model-advisor-output/hive-promotion-journal-finalized-smoke.md \
+            --json-output model-advisor-output/hive-promotion-journal-finalized-smoke.json
+          python -m tools.ai_model_advisor.hive_promotion_checkpoint create \
+            --journal model-advisor-output/hive-promotion-journal-finalized-smoke.json \
+            --json-output model-advisor-output/hive-promotion-finalized-checkpoint-smoke.json
+          python -m tools.ai_model_advisor.cli hive-promotion-registry \
+            --pair model-advisor-output/hive-promotion-journal-finalized-smoke.json \
+              model-advisor-output/hive-promotion-finalized-checkpoint-smoke.json \
+            --require-ready \
+            --output model-advisor-output/hive-promotion-finalized-registry-smoke.md \
+            --json-output model-advisor-output/hive-promotion-finalized-registry-smoke.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          target = Path(os.environ["RUNNER_TEMP"]) / "hive-config-rolled-back-smoke.json"
+          target.write_text(
+              json.dumps(
+                  {
+                      "llm": {
+                          "provider": "test",
+                          "model": "current-model",
+                          "reasoning_effort": "medium",
+                      }
+                  }
+              ),
+              encoding="utf-8",
+          )
+          PY
+          python -m tools.ai_model_advisor.cli hive-promotion-status \
+            --pair model-advisor-output/hive-promotion-journal-finalized-smoke.json \
+              model-advisor-output/hive-promotion-finalized-checkpoint-smoke.json \
+            --hive-config "$RUNNER_TEMP/hive-config-rolled-back-smoke.json" \
+            --require-verified \
+            --output model-advisor-output/hive-promotion-finalized-status-smoke.md \
+            --json-output model-advisor-output/hive-promotion-finalized-status-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          finalization = json.loads(
+              Path("model-advisor-output/hive-promotion-rollback-finalization-smoke.json").read_text()
+          )
+          journal = json.loads(
+              Path("model-advisor-output/hive-promotion-journal-finalized-smoke.json").read_text()
+          )
+          registry = json.loads(
+              Path("model-advisor-output/hive-promotion-finalized-registry-smoke.json").read_text()
+          )
+          status = json.loads(
+              Path("model-advisor-output/hive-promotion-finalized-status-smoke.json").read_text()
+          )
+
+          assert finalization["state"] == "rollback_verified_from_fresh_preflight"
+          assert finalization["category"] == "debugging"
+          assert finalization["change_id"]
+          assert finalization["scope"] == "queen"
+          assert journal["state"] == "rolled_back_finalized"
+          assert len(journal["entries"]) == 4
+          assert journal["entries"][-1]["event"] == "rollback_finalization"
+          assert (
+              journal["entries"][-1]["evidence_hashes"]["rollback_audit_sha256"]
+              == journal["entries"][-2]["artifact_sha256"]
+          )
+          route = registry["routes"][0]
+          assert route["status"] == "current_verified"
+          assert route["current_verified_config"]["model_id"] == "current-model"
+          assert route["active_change_id"] is None
+          assert route["rollback_status"] == "not_available"
+          assert route["evidence"][0]["state"] == "rolled_back_finalized"
+          assert status["status"] == "verified"
+          assert status["manual_rollback_ready_count"] == 0
+          PY
+
       - name: Publish advisor summary
         shell: bash
         run: |
@@ -921,6 +1012,12 @@ jobs:
           cat model-advisor-output/hive-promotion-rollback-plan-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/hive-promotion-rollback-preflight-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-rollback-finalization-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-journal-finalized-smoke.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat model-advisor-output/hive-promotion-finalized-status-smoke.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat model-advisor-output/experiment-plan.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n---\n\n' >> "$GITHUB_STEP_SUMMARY"
