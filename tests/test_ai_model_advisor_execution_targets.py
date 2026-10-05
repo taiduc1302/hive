@@ -18,7 +18,13 @@ def test_execution_target_catalog_is_machine_discoverable() -> None:
         "tools.ai_model_advisor.hive_agent_loop_adapter"
     )
     assert catalog["hive_agent_loop"]["execution_modes"] == ["hive_agent_loop"]
-    assert catalog["hive_agent_loop_tool"]["runner_module"] == (\n        "tools.ai_model_advisor.hive_agent_loop_tool_adapter"\n    )\n    assert catalog["hive_agent_loop_tool"]["execution_modes"] == [\n        "hive_agent_loop_tool"\n    ]\n    assert catalog["provider_api"]["runner_module"] == (
+    assert catalog["hive_agent_loop_tool"]["runner_module"] == (
+        "tools.ai_model_advisor.hive_agent_loop_tool_adapter"
+    )
+    assert catalog["hive_agent_loop_tool"]["execution_modes"] == [
+        "hive_agent_loop_tool"
+    ]
+    assert catalog["provider_api"]["runner_module"] == (
         "tools.ai_model_advisor.provider_api_adapter"
     )
     assert catalog["hive"]["requires_external_judge"] is True
