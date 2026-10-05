@@ -97,6 +97,7 @@ def test_native_hive_config_rejects_invalid_reasoning_effort(tmp_path, value) ->
     with pytest.raises(ValueError, match="reasoning_effort must be a non-empty string"):
         config.get_llm_extra_kwargs()
 
+
 def test_native_hive_config_null_reasoning_effort_uses_provider_default(tmp_path) -> None:
     config = _load_config_module()
     config.HIVE_CONFIG_FILE = _write_config(
@@ -111,3 +112,47 @@ def test_native_hive_config_null_reasoning_effort_uses_provider_default(tmp_path
     )
 
     assert config.get_llm_extra_kwargs() == {}
+
+
+def test_subscription_without_token_preserves_extra_body_fallback(tmp_path) -> None:
+    config = _load_config_module()
+    config.HIVE_CONFIG_FILE = _write_config(
+        tmp_path,
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-test",
+                "use_claude_code_subscription": True,
+                "reasoning_effort": "high",
+                "extra_body": {"custom": "value"},
+            }
+        },
+    )
+    config.get_api_key = lambda: None
+
+    assert config.get_llm_extra_kwargs() == {
+        "extra_body": {"custom": "value"},
+        "reasoning_effort": "high",
+    }
+
+
+def test_worker_subscription_without_token_preserves_ollama_fallback(tmp_path) -> None:
+    config = _load_config_module()
+    config.HIVE_CONFIG_FILE = _write_config(
+        tmp_path,
+        {
+            "worker_llm": {
+                "provider": "ollama",
+                "model": "local",
+                "use_claude_code_subscription": True,
+                "num_ctx": 32768,
+                "reasoning_effort": "medium",
+            }
+        },
+    )
+    config.get_worker_api_key = lambda: None
+
+    assert config.get_worker_llm_extra_kwargs() == {
+        "num_ctx": 32768,
+        "reasoning_effort": "medium",
+    }
