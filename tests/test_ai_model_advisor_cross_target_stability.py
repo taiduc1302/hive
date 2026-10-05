@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tools.ai_model_advisor.cross_target_stability import build_cross_target_stability_report
-from tools.ai_model_advisor.execution_targets import profile_for_host
-from tools.ai_model_advisor.experiment_run import ExperimentRunnerError
-from tools.ai_model_advisor.feedback import FeedbackStore, UsageRecord
+from tools.ai_model_advisor import cross_target_stability, execution_targets, experiment_run, feedback
 
 
 EXPERIMENT_ID = "cross-debugging-01"
@@ -42,8 +39,8 @@ def _plan() -> dict:
         "cross_target_execution": {
             "schema_version": 1,
             "side_targets": {
-                "A": profile_for_host("hive_agent_loop").binding(),
-                "B": profile_for_host("hive_agent_loop_tool").binding(),
+                "A": execution_targets.profile_for_host("hive_agent_loop").binding(),
+                "B": execution_targets.profile_for_host("hive_agent_loop_tool").binding(),
             },
         },
     }
@@ -56,10 +53,10 @@ def _record(
     latency: float,
     cost: float,
     outcome: str = "success",
-) -> UsageRecord:
+) -> feedback.UsageRecord:
     execution_mode = "hive_agent_loop" if side == "A" else "hive_agent_loop_tool"
     task_id = f"cross-debugging-{index:02d}"
-    return UsageRecord(
+    return feedback.UsageRecord(
         provider="openai",
         model_id="gpt-5.6-sol",
         effort="high",
@@ -83,9 +80,9 @@ def test_cross_target_stability_reports_repeatable_overhead() -> None:
             ]
         )
 
-    report = build_cross_target_stability_report(
+    report = cross_target_stability.build_cross_target_stability_report(
         _plan(),
-        FeedbackStore(records),
+        feedback.FeedbackStore(records),
         EXPERIMENT_ID,
     )
 
@@ -109,9 +106,9 @@ def test_cross_target_stability_rejects_high_variance() -> None:
             ]
         )
 
-    report = build_cross_target_stability_report(
+    report = cross_target_stability.build_cross_target_stability_report(
         _plan(),
-        FeedbackStore(records),
+        feedback.FeedbackStore(records),
         EXPERIMENT_ID,
     )
 
@@ -129,9 +126,9 @@ def test_cross_target_stability_requires_minimum_matched_pairs() -> None:
             ]
         )
 
-    report = build_cross_target_stability_report(
+    report = cross_target_stability.build_cross_target_stability_report(
         _plan(),
-        FeedbackStore(records),
+        feedback.FeedbackStore(records),
         EXPERIMENT_ID,
     )
 
@@ -155,9 +152,9 @@ def test_cross_target_stability_surfaces_failure_rate_regression() -> None:
             ]
         )
 
-    report = build_cross_target_stability_report(
+    report = cross_target_stability.build_cross_target_stability_report(
         _plan(),
-        FeedbackStore(records),
+        feedback.FeedbackStore(records),
         EXPERIMENT_ID,
     )
 
@@ -174,10 +171,10 @@ def test_cross_target_stability_rejects_duplicate_side_task_records() -> None:
         _record("B", 1, latency=1.5, cost=0.012),
     ]
 
-    with pytest.raises(ExperimentRunnerError, match="Duplicate cross-target feedback"):
-        build_cross_target_stability_report(
+    with pytest.raises(experiment_run.ExperimentRunnerError, match="Duplicate cross-target feedback"):
+        cross_target_stability.build_cross_target_stability_report(
             _plan(),
-            FeedbackStore(records),
+            feedback.FeedbackStore(records),
             EXPERIMENT_ID,
             min_pairs=2,
         )
