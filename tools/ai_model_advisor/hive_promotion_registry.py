@@ -25,6 +25,7 @@ _STATE_RANK = {
     "previewed": 0,
     "applied_verified": 1,
     "rolled_back_verified": 2,
+    "rolled_back_finalized": 3,
 }
 
 
@@ -228,7 +229,7 @@ def _route_report(
                     "checkpoint_sha256": item["checkpoint"]["checkpoint_sha256"],
                 }
             )
-        elif state == "rolled_back_verified":
+        elif state in {"rolled_back_verified", "rolled_back_finalized"}:
             current_claims.append(
                 {
                     "change_id": journal["change_id"],
