@@ -12,13 +12,13 @@ from tools.ai_model_advisor.execution_targets import (
 def test_execution_target_catalog_is_machine_discoverable() -> None:
     catalog = target_catalog()
 
-    assert set(catalog) == {"hive", "hive_agent_loop", "provider_api"}
+    assert set(catalog) == {"hive", "hive_agent_loop", "hive_agent_loop_tool", "provider_api"}
     assert catalog["hive"]["runner_module"] == "tools.ai_model_advisor.hive_litellm_adapter"
     assert catalog["hive_agent_loop"]["runner_module"] == (
         "tools.ai_model_advisor.hive_agent_loop_adapter"
     )
     assert catalog["hive_agent_loop"]["execution_modes"] == ["hive_agent_loop"]
-    assert catalog["provider_api"]["runner_module"] == (
+    assert catalog["hive_agent_loop_tool"]["runner_module"] == (\n        "tools.ai_model_advisor.hive_agent_loop_tool_adapter"\n    )\n    assert catalog["hive_agent_loop_tool"]["execution_modes"] == [\n        "hive_agent_loop_tool"\n    ]\n    assert catalog["provider_api"]["runner_module"] == (
         "tools.ai_model_advisor.provider_api_adapter"
     )
     assert catalog["hive"]["requires_external_judge"] is True
@@ -91,4 +91,29 @@ def test_agent_loop_target_accepts_only_agent_loop_mode() -> None:
     )
     assert blockers == [
         "adapter supports execution_mode=hive_agent_loop, not single"
+    ]
+
+
+def test_agent_loop_tool_target_accepts_only_tool_mode() -> None:
+    profile = profile_for_host("hive_agent_loop_tool")
+    assert configuration_blockers(
+        {
+            "provider": "openai",
+            "model_id": "gpt-6-astra",
+            "effort": "high",
+            "execution_mode": "hive_agent_loop_tool",
+        },
+        profile,
+    ) == []
+    blockers = configuration_blockers(
+        {
+            "provider": "openai",
+            "model_id": "gpt-6-astra",
+            "effort": "high",
+            "execution_mode": "hive_agent_loop",
+        },
+        profile,
+    )
+    assert blockers == [
+        "adapter supports execution_mode=hive_agent_loop_tool, not hive_agent_loop"
     ]
