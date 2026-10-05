@@ -42,7 +42,7 @@ Before `--apply`, run the Hive experiment preflight. It now checks each A/B side
 - unsupported explicit effort values are blocked;
 - `effort=default` remains valid and means omit the provider effort control.
 
-This catalog gate performs no provider call and does **not** prove that the installed Hive/LiteLLM runtime supports the model. A real run must still pass the post-transform wire proof below.
+This catalog gate is a freshness-and-consistency guard. It performs no provider call and does **not** prove that the installed Hive/LiteLLM runtime supports the model. A real run must still pass the post-transform wire proof below.
 
 ```bash
 python -m tools.ai_model_advisor.hive_experiment_preflight \
