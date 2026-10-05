@@ -101,3 +101,17 @@ Scopes are `queen`, `worker`, or `both`.
 The preview changes reasoning effort only. It does not change credentials, provider, model, or orchestration, and it never edits `configuration.json` automatically.
 
 For `effort=default`, the merge patch uses `null` for `reasoning_effort`, meaning the explicit override should be removed so the provider default is restored.
+
+## v0.38 controlled single-tool AgentLoop adapter
+
+`tools.ai_model_advisor.hive_agent_loop_tool_adapter` measures a deliberately narrow Hive lifecycle:
+
+1. first LLM turn receives exactly one local benchmark tool schema;
+2. the model must call `advisor_constant` exactly once with no arguments;
+3. Hive dispatches the deterministic in-process tool and records start/completion events;
+4. a second LLM turn receives the tool result and produces the final answer;
+5. AgentLoop must finish with one implicit ACCEPT verdict;
+6. the adapter verifies the requested model/effort on Hive's captured post-transform request;
+7. benchmark correctness still comes only from the external deterministic judge.
+
+The adapter rejects extra/missing tool calls, unexpected tool arguments, tool errors, mismatched tool lifecycle IDs, a non-deterministic tool result, any turn count other than two, or incomplete loop/judge evidence. Provider/tool lifecycle completion remains `outcome: partial` until the external judge evaluates the answer.
