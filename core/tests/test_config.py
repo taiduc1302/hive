@@ -82,7 +82,7 @@ class TestReasoningEffortConfig:
 
         assert get_worker_llm_extra_kwargs() == {"reasoning_effort": "low"}
 
-    @pytest.mark.parametrize("value", ["", "   ", 3, None])
+    @pytest.mark.parametrize("value", ["", "   ", 3])
     def test_invalid_reasoning_effort_is_rejected(self, tmp_path, monkeypatch, value):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
@@ -95,6 +95,16 @@ class TestReasoningEffortConfig:
 
         with pytest.raises(ValueError, match="reasoning_effort must be a non-empty string"):
             get_llm_extra_kwargs()
+
+    def test_null_reasoning_effort_restores_provider_default(self, tmp_path, monkeypatch):
+        config_file = tmp_path / "configuration.json"
+        config_file.write_text(
+            '{"llm":{"provider":"openai","model":"gpt-test","reasoning_effort":null}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
+
+        assert get_llm_extra_kwargs() == {}
 
 
 class TestOpenRouterConfig:
