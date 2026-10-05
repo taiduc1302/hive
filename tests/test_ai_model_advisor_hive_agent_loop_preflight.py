@@ -23,6 +23,7 @@ def _plan() -> dict:
                         "experiment_id": "exp-agent-loop",
                         "category": "debugging",
                         "kind": "execution_mode",
+                        "task_id_template": "agent-loop-preflight-{nn}",
                         "primary": dict(config),
                         "challenger": dict(config),
                     }
