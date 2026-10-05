@@ -1000,7 +1000,7 @@ def build_parser() -> argparse.ArgumentParser:
     journal_append.add_argument("--journal", required=True)
     journal_append.add_argument(
         "--event",
-        choices=["applied_lifecycle", "rollback_audit"],
+        choices=["applied_lifecycle", "rollback_audit", "rollback_finalization"],
         required=True,
     )
     journal_append.add_argument("--artifact", required=True)
