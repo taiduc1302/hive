@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   format:
-    if: github.event.head_commit.message != 'style: format Advisor v0.20 core files'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
