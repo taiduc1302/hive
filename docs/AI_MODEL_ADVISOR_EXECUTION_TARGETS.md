@@ -138,3 +138,12 @@ execution-target catalog
 ```
 
 This keeps host provenance auditable without coupling the generic experiment planner to one execution environment, and makes target/runner/policy drift testable instead of documentation-only.
+
+## Controlled Hive AgentLoop targets
+
+Two Hive AgentLoop targets are intentionally separate contracts:
+
+- `host=hive_agent_loop`, `execution_mode=hive_agent_loop`: one LLM turn, no tool calls, implicit ACCEPT;
+- `host=hive_agent_loop_tool`, `execution_mode=hive_agent_loop_tool`: one deterministic local tool call, exactly two LLM turns, then implicit ACCEPT.
+
+The tool target uses a side-effect-free in-process benchmark tool. It does not grant MCP, filesystem, shell, browser, network, colony, subagent, or Work-style capabilities. Both targets still require an external deterministic judge for benchmark correctness and post-transform model/effort proof before feedback is accepted.
