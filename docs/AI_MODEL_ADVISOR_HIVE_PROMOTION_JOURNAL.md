@@ -17,6 +17,10 @@ applied_verified journal
       | append rolled_back_verified rollback audit
       v
 rolled_back_verified journal
+      |
+      | append fresh-preflight rollback finalization
+      v
+rolled_back_finalized journal
 ```
 
 ## Why this exists
@@ -44,13 +48,16 @@ Changing an earlier entry breaks the chain.
 
 ## Supported event order
 
-v0.28 intentionally supports only:
+The journal supports these exact monotonic sequences:
 
 ```text
 promotion_preview
 promotion_preview -> applied_lifecycle
 promotion_preview -> applied_lifecycle -> rollback_audit
+promotion_preview -> applied_lifecycle -> rollback_audit -> rollback_finalization
 ```
+
+The v0.37 terminal `rollback_finalization` event binds the journal to the stronger fresh-preflight rollback proof introduced in v0.35. Older journals that stop at `rollback_audit` remain valid.
 
 It fails closed if an operator attempts to:
 
@@ -92,6 +99,19 @@ python -m tools.ai_model_advisor.cli hive-promotion-journal append \
   --output hive-promotion-journal-rolled-back.md \
   --json-output hive-promotion-journal-rolled-back.json
 ```
+
+When a v0.35+ fresh-preflight finalization artifact is available, close the evidence chain:
+
+```bash
+python -m tools.ai_model_advisor.cli hive-promotion-journal append \
+  --journal hive-promotion-journal-rolled-back.json \
+  --event rollback_finalization \
+  --artifact rollback-finalization.json \
+  --output hive-promotion-journal-finalized.md \
+  --json-output hive-promotion-journal-finalized.json
+```
+
+The final append verifies promotion identity plus exact links to the journaled applied lifecycle and rollback audit before emitting `rolled_back_finalized`.
 
 ## Safety boundary
 
