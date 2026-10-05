@@ -256,6 +256,7 @@ def build_capability_report(
             "execution_modes": {
                 "single": "supported_by_advisor_adapter",
                 "hive_agent_loop": "supported_by_advisor_adapter",
+                "hive_agent_loop_tool": "supported_by_advisor_adapter",
                 "dynamic_workflow": "host_exists_adapter_not_implemented",
                 "subagents": "host_exists_adapter_not_implemented",
                 "chatgpt_work": "external_host_not_hive",
