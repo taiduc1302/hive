@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tools.ai_model_advisor.cross_target_stability import (
-    build_cross_target_stability_report,
-)
+from tools.ai_model_advisor.cross_target_stability import build_cross_target_stability_report
 from tools.ai_model_advisor.execution_targets import profile_for_host
 from tools.ai_model_advisor.experiment_run import ExperimentRunnerError
 from tools.ai_model_advisor.feedback import FeedbackStore, UsageRecord
