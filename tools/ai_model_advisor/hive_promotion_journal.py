@@ -12,6 +12,7 @@ _STATE_BY_EVENT = {
     "promotion_preview": "previewed",
     "applied_lifecycle": "applied_verified",
     "rollback_audit": "rolled_back_verified",
+    "rollback_finalization": "rolled_back_finalized",
 }
 
 
@@ -302,6 +303,12 @@ def validate_hive_promotion_journal(journal: dict[str, Any]) -> None:
         ["promotion_preview"],
         ["promotion_preview", "applied_lifecycle"],
         ["promotion_preview", "applied_lifecycle", "rollback_audit"],
+        [
+            "promotion_preview",
+            "applied_lifecycle",
+            "rollback_audit",
+            "rollback_finalization",
+        ],
     ]
     if event_order not in allowed_orders:
         raise HivePromotionJournalError(
@@ -483,9 +490,63 @@ def append_hive_promotion_journal(
                 "applied_lifecycle_sha256"
             ),
         }
+    elif event == "rollback_finalization":
+        if current_state != "rolled_back_verified":
+            raise HivePromotionJournalError(
+                "rollback_finalization can only follow a rolled_back_verified journal state"
+            )
+        if artifact.get("state") != "rollback_verified_from_fresh_preflight":
+            raise HivePromotionJournalError(
+                "rollback finalization artifact must have "
+                "state=rollback_verified_from_fresh_preflight"
+            )
+        if artifact.get("rollback_verified_from_fresh_preflight") is not True:
+            raise HivePromotionJournalError(
+                "rollback finalization artifact must set "
+                "rollback_verified_from_fresh_preflight=true"
+            )
+        if artifact.get("automatic_config_mutation") is not False:
+            raise HivePromotionJournalError(
+                "rollback finalization must keep automatic_config_mutation=false"
+            )
+        if artifact.get("automatic_rollback") is not False:
+            raise HivePromotionJournalError(
+                "rollback finalization must keep automatic_rollback=false"
+            )
+        hashes = _validate_event_common(updated, artifact)
+        rollback_entry = entries[-1]
+        if rollback_entry.get("event") != "rollback_audit":
+            raise HivePromotionJournalError(
+                "rollback finalization requires the prior journal entry to be rollback_audit"
+            )
+        if hashes.get("rollback_audit_sha256") != rollback_entry["artifact_sha256"]:
+            raise HivePromotionJournalError(
+                "rollback finalization rollback_audit_sha256 does not match "
+                "the journaled rollback audit artifact"
+            )
+        applied_entry = entries[-2] if len(entries) >= 2 else {}
+        if applied_entry.get("event") != "applied_lifecycle":
+            raise HivePromotionJournalError(
+                "rollback finalization requires the applied_lifecycle journal entry"
+            )
+        if (
+            hashes.get("applied_lifecycle_sha256")
+            != applied_entry.get("artifact_sha256")
+        ):
+            raise HivePromotionJournalError(
+                "rollback finalization applied_lifecycle_sha256 does not match "
+                "the journaled applied lifecycle artifact"
+            )
+        evidence_hashes = {
+            "rollback_audit_sha256": hashes.get("rollback_audit_sha256"),
+            "rollback_plan_sha256": hashes.get("rollback_plan_sha256"),
+            "rollback_preflight_sha256": hashes.get("rollback_preflight_sha256"),
+            "rollback_receipt_sha256": hashes.get("rollback_receipt_sha256"),
+            "applied_lifecycle_sha256": hashes.get("applied_lifecycle_sha256"),
+        }
     else:
         raise HivePromotionJournalError(
-            "event must be applied_lifecycle or rollback_audit"
+            "event must be applied_lifecycle, rollback_audit, or rollback_finalization"
         )
 
     artifact_sha = _canonical_sha256(artifact)
@@ -574,7 +635,7 @@ def main(argv: list[str] | None = None) -> int:
     append.add_argument("--journal", required=True)
     append.add_argument(
         "--event",
-        choices=["applied_lifecycle", "rollback_audit"],
+        choices=["applied_lifecycle", "rollback_audit", "rollback_finalization"],
         required=True,
     )
     append.add_argument("--artifact", required=True)
