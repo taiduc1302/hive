@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pytest
+from pytest import approx, raises
 
 from tools.ai_model_advisor.cross_target_stability import build_cross_target_stability_report
 from tools.ai_model_advisor.execution_targets import profile_for_host
@@ -92,9 +92,9 @@ def test_cross_target_stability_reports_repeatable_overhead() -> None:
     assert report["status"] == "stable_overhead"
     assert report["matched_pairs"] == 3
     assert report["successful_latency_pairs"] == 3
-    assert report["latency"]["median_overhead_ratio"] == pytest.approx(0.5)
-    assert report["latency"]["mad"] == pytest.approx(0.0)
-    assert report["cost"]["median_overhead_ratio"] == pytest.approx(0.2)
+    assert report["latency"]["median_overhead_ratio"] == approx(0.5)
+    assert report["latency"]["mad"] == approx(0.0)
+    assert report["cost"]["median_overhead_ratio"] == approx(0.2)
     assert report["policy"]["automatic_routing_mutation"] is False
 
 
@@ -162,7 +162,7 @@ def test_cross_target_stability_surfaces_failure_rate_regression() -> None:
     )
 
     assert report["status"] == "insufficient_evidence"
-    assert report["failure_rate"]["delta_b_minus_a"] == pytest.approx(1 / 3)
+    assert report["failure_rate"]["delta_b_minus_a"] == approx(1 / 3)
     assert "failure_rate_delta_too_large" in report["blockers"]
 
 
@@ -174,7 +174,7 @@ def test_cross_target_stability_rejects_duplicate_side_task_records() -> None:
         _record("B", 1, latency=1.5, cost=0.012),
     ]
 
-    with pytest.raises(ExperimentRunnerError, match="Duplicate cross-target feedback"):
+    with raises(ExperimentRunnerError, match="Duplicate cross-target feedback"):
         build_cross_target_stability_report(
             _plan(),
             FeedbackStore(records),
