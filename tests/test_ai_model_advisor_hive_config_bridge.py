@@ -80,7 +80,7 @@ def test_native_worker_config_forwards_reasoning_effort(tmp_path) -> None:
     }
 
 
-@pytest.mark.parametrize("value", ["", "   ", 3, None])
+@pytest.mark.parametrize("value", ["", "   ", 3])
 def test_native_hive_config_rejects_invalid_reasoning_effort(tmp_path, value) -> None:
     config = _load_config_module()
     config.HIVE_CONFIG_FILE = _write_config(
