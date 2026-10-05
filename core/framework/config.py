@@ -484,6 +484,7 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
 
     return _with_reasoning_effort(worker_llm, base)
 
+
 DEFAULT_MAX_CONTEXT_TOKENS = 32_000
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
