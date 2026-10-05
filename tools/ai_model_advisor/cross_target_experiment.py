@@ -37,16 +37,13 @@ def _config(pair: dict[str, Any], side: str) -> dict[str, Any]:
     return value
 
 
-def _same_model_controls(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    return all(a.get(key) == b.get(key) for key in ("provider", "model_id", "effort"))
-
-
 def build_agent_loop_overhead_plan(
     plan: dict[str, Any],
     experiment_id: str,
     *,
     side_a_host: str = "hive_agent_loop",
     side_b_host: str = "hive_agent_loop_tool",
+    source_side: str = "A",
 ) -> dict[str, Any]:
     """Derive a two-target execution-overhead benchmark from one saved pair.
 
@@ -63,16 +60,19 @@ def build_agent_loop_overhead_plan(
         raise ExperimentRunnerError("Cross-target overhead plan requires two different hosts")
 
     pair = find_experiment(plan, experiment_id)
-    source_a = _config(pair, "A")
-    source_b = _config(pair, "B")
-    if not _same_model_controls(source_a, source_b):
-        raise ExperimentRunnerError(
-            "Cross-target overhead benchmark requires identical provider/model/effort "
-            "on both saved experiment sides"
-        )
+    if source_side not in {"A", "B"}:
+        raise ExperimentRunnerError("source_side must be A or B")
+    source = copy.deepcopy(_config(pair, source_side))
+    for key in ("provider", "model_id", "effort"):
+        if not source.get(key):
+            raise ExperimentRunnerError(
+                f"Cross-target source side {source_side} is missing {key!r}"
+            )
 
     derived = copy.deepcopy(plan)
     derived_pair = find_experiment(derived, experiment_id)
+    derived_pair["primary"] = copy.deepcopy(source)
+    derived_pair["challenger"] = copy.deepcopy(source)
     profiles = {
         "A": profile_for_host(side_a_host),
         "B": profile_for_host(side_b_host),
@@ -94,6 +94,7 @@ def build_agent_loop_overhead_plan(
         side_b_host=side_b_host,
     ).as_dict()
     derived_pair["kind"] = "execution_target_overhead"
+    derived_pair["source_side"] = source_side
     return derived
 
 
