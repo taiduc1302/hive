@@ -52,6 +52,7 @@ def _side_records(
     experiment_id: str,
     side: str,
     config_key: tuple[str, str, str],
+    task_category: str,
 ) -> dict[str, UsageRecord]:
     suffix = side.lower()
     result: dict[str, UsageRecord] = {}
@@ -59,6 +60,8 @@ def _side_records(
         if not record.task_id:
             continue
         if _record_key(record) != config_key:
+            continue
+        if record.task_category != task_category:
             continue
         expected_source = f"benchmark:{experiment_id}:{record.task_id}:{suffix}"
         if record.source_id != expected_source:
@@ -89,6 +92,13 @@ def build_cross_target_stability_report(
 
     profiles = cross_target_profiles(plan)
     pair = find_experiment(plan, experiment_id)
+    if pair.get("kind") != "execution_target_overhead":
+        raise ExperimentRunnerError(
+            "Cross-target stability requires kind='execution_target_overhead'"
+        )
+    task_category = str(pair.get("category") or "")
+    if not task_category:
+        raise ExperimentRunnerError("Cross-target experiment is missing category")
     primary = pair["primary"]
     challenger = pair["challenger"]
     if not isinstance(primary, dict) or not isinstance(challenger, dict):
@@ -99,8 +109,8 @@ def build_cross_target_stability_report(
     if not all(a_key) or not all(b_key):
         raise ExperimentRunnerError("Cross-target experiment is missing model/effort/execution identity")
 
-    side_a = _side_records(feedback, experiment_id, "A", a_key)
-    side_b = _side_records(feedback, experiment_id, "B", b_key)
+    side_a = _side_records(feedback, experiment_id, "A", a_key, task_category)
+    side_b = _side_records(feedback, experiment_id, "B", b_key, task_category)
     matched_ids = sorted(set(side_a) & set(side_b))
 
     latency_deltas: list[float] = []
