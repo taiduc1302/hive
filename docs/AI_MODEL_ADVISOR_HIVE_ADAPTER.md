@@ -33,6 +33,24 @@ The outgoing model must also match the requested model. If the pinned LiteLLM ve
 
 This is important because Hive currently pins `litellm==1.83.4` while the Advisor registry can know about newer models. Registry freshness does not imply runtime compatibility.
 
+## Catalog preflight before provider spend
+
+Before `--apply`, run the Hive experiment preflight. It now checks each A/B side against the current Advisor model registry as an offline guard:
+
+- unknown provider/model IDs are blocked;
+- models marked retired/deprecated are blocked;
+- unsupported explicit effort values are blocked;
+- `effort=default` remains valid and means omit the provider effort control.
+
+This catalog gate performs no provider call and does **not** prove that the installed Hive/LiteLLM runtime supports the model. A real run must still pass the post-transform wire proof below.
+
+```bash
+python -m tools.ai_model_advisor.hive_experiment_preflight \
+  --plan model-advisor-output/experiment-plan.json \
+  --experiment-id <id> \
+  --require-ready
+```
+
 ## Invocation
 
 Use it anywhere `experiment-run` accepts an adapter command:
