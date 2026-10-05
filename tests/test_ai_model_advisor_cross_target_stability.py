@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from importlib import import_module
+
 import pytest
 
-from tools.ai_model_advisor import (
-    cross_target_stability,
-    execution_targets,
-    experiment_run,
-    feedback,
-)
+cross_target_stability = import_module("tools.ai_model_advisor.cross_target_stability")
+execution_targets = import_module("tools.ai_model_advisor.execution_targets")
+experiment_run = import_module("tools.ai_model_advisor.experiment_run")
+feedback = import_module("tools.ai_model_advisor.feedback")
 
 
 EXPERIMENT_ID = "cross-debugging-01"
