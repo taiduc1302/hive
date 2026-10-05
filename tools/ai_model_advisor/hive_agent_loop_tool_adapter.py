@@ -301,7 +301,7 @@ async def _execute_hive_agent_loop_tool(
             max_stream_retries=0,
             capacity_retry_max_seconds=0.0,
             tool_call_budget=1,
-            tool_call_lifetime_budget=1,
+            tool_call_lifetime_budget=0,
         ),
         tool_executor=tool_executor,
     )
