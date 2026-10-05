@@ -70,3 +70,32 @@ v0.35 preserves the existing operator boundary:
 - human approval required;
 - no provider calls;
 - no credentials or unrelated Hive configuration copied into the finalization artifact.
+
+
+## v0.37: append finalization to the promotion journal
+
+v0.37 makes the stronger v0.35 finalization evidence part of the append-only promotion history.
+
+A successful finalization now also carries the reviewed promotion identity:
+
+- `category`;
+- `change_id`;
+- `scope`;
+- exact reviewed `transition`.
+
+That lets the journal fail closed if a finalization artifact belongs to a different promotion, even when individual evidence hashes are otherwise well-formed.
+
+After a verified `rollback_audit`, append the finalization artifact:
+
+```bash
+python -m tools.ai_model_advisor.cli hive-promotion-journal append \
+  --journal hive-promotion-journal-rolled-back.json \
+  --event rollback_finalization \
+  --artifact rollback-finalization.json \
+  --output hive-promotion-journal-finalized.md \
+  --json-output hive-promotion-journal-finalized.json
+```
+
+The journal requires the finalization's `rollback_audit_sha256` and `applied_lifecycle_sha256` to match the exact artifacts already recorded in the hash chain. A successful append produces terminal state `rolled_back_finalized`.
+
+Existing journals ending at `rolled_back_verified` remain valid and continue to work with checkpoints, the registry, reconciliation, and status reporting.
