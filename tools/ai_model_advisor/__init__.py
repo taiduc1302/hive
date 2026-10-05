@@ -2,6 +2,7 @@
 
 from .activity import ActivityAnalyzer
 from .canary_evaluate import evaluate_promotion_canary
+from .cross_target_decision import build_cross_target_decision
 from .cross_target_stability import build_cross_target_stability_report
 from .empirical_leaderboard import build_empirical_leaderboard
 from .feedback import FeedbackStore, UsageRecord
@@ -42,6 +43,7 @@ __all__ = [
     "ActivityAnalyzer",
     "FeedbackStore",
     "append_hive_promotion_journal",
+    "build_cross_target_decision",
     "build_cross_target_stability_report",
     "build_empirical_leaderboard",
     "build_hive_config_preview",
@@ -70,4 +72,4 @@ __all__ = [
     "validate_hive_promotion_journal",
     "verify_hive_promotion_checkpoint",
 ]
-__version__ = "0.40.0"
+__version__ = "0.41.0"
