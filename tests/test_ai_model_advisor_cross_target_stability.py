@@ -8,6 +8,7 @@ cross_target_stability = import_module("tools.ai_model_advisor.cross_target_stab
 execution_targets = import_module("tools.ai_model_advisor.execution_targets")
 experiment_run = import_module("tools.ai_model_advisor.experiment_run")
 feedback = import_module("tools.ai_model_advisor.feedback")
+json = import_module("json")
 
 
 EXPERIMENT_ID = "cross-debugging-01"
@@ -220,3 +221,47 @@ def test_cross_target_stability_requires_overhead_kind() -> None:
             feedback.FeedbackStore(),
             EXPERIMENT_ID,
         )
+
+
+def test_cross_target_stability_cli_writes_offline_artifacts(tmp_path) -> None:
+    plan_path = tmp_path / "plan.json"
+    feedback_path = tmp_path / "feedback.jsonl"
+    markdown_path = tmp_path / "stability.md"
+    json_path = tmp_path / "stability.json"
+
+    plan_path.write_text(json.dumps(_plan()), encoding="utf-8")
+    records = []
+    for index in (1, 2, 3):
+        records.extend(
+            [
+                _record("A", index, latency=1.0, cost=0.010),
+                _record("B", index, latency=1.5, cost=0.012),
+            ]
+        )
+    feedback_path.write_text(
+        "".join(json.dumps(record.as_dict()) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+    status = cross_target_stability.main(
+        [
+            "--plan",
+            str(plan_path),
+            "--experiment-id",
+            EXPERIMENT_ID,
+            "--feedback",
+            str(feedback_path),
+            "--output",
+            str(markdown_path),
+            "--json-output",
+            str(json_path),
+        ]
+    )
+
+    assert status == 0
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert report["status"] == "stable_overhead"
+    assert report["matched_pairs"] == 3
+    assert "Cross-Target Stability" in markdown
+    assert "Provider calls" not in markdown
