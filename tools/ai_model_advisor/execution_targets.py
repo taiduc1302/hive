@@ -66,6 +66,21 @@ _PROFILES: tuple[ExecutionTargetProfile, ...] = (
         evidence_method="post_transform_wire_and_agent_loop_lifecycle",
     ),
     ExecutionTargetProfile(
+        host="hive_agent_loop_tool",
+        adapter="hive_agent_loop_tool",
+        adapter_contract_version=1,
+        preflight_module="tools.ai_model_advisor.hive_agent_loop_tool_experiment_preflight",
+        runner_module="tools.ai_model_advisor.hive_agent_loop_tool_adapter",
+        supported_providers=("openai", "anthropic"),
+        execution_modes=("hive_agent_loop_tool",),
+        requires_external_judge=True,
+        credential_env_by_provider={
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+        },
+        evidence_method="post_transform_wire_tool_and_agent_loop_lifecycle",
+    ),
+    ExecutionTargetProfile(
         host="provider_api",
         adapter="provider_api",
         adapter_contract_version=1,
