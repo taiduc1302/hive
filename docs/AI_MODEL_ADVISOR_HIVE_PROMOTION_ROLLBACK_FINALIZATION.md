@@ -99,3 +99,7 @@ python -m tools.ai_model_advisor.cli hive-promotion-journal append \
 The journal requires the finalization's `rollback_audit_sha256` and `applied_lifecycle_sha256` to match the exact artifacts already recorded in the hash chain. A successful append produces terminal state `rolled_back_finalized`.
 
 Existing journals ending at `rolled_back_verified` remain valid and continue to work with checkpoints, the registry, reconciliation, and status reporting.
+
+## v0.37 stacked validation
+
+The v0.37 branch is stacked on AI Model Advisor v0.36 after the controlled Hive AgentLoop target was synchronized into this branch. The rollback-finalization/journal contract is unchanged by that sync: v0.37 only extends promotion-history integrity, while v0.36 remains the execution-target layer.
