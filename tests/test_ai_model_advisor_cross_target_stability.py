@@ -183,3 +183,40 @@ def test_cross_target_stability_rejects_duplicate_side_task_records() -> None:
             EXPERIMENT_ID,
             min_pairs=2,
         )
+
+
+def test_cross_target_stability_ignores_other_task_category() -> None:
+    records = []
+    for index in (1, 2, 3):
+        a = _record("A", index, latency=1.0, cost=0.010)
+        b = _record("B", index, latency=1.5, cost=0.012)
+        records.extend(
+            [
+                feedback.UsageRecord(**{**a.as_dict(), "task_category": "research"}),
+                b,
+            ]
+        )
+
+    report = cross_target_stability.build_cross_target_stability_report(
+        _plan(),
+        feedback.FeedbackStore(records),
+        EXPERIMENT_ID,
+    )
+
+    assert report["status"] == "insufficient_evidence"
+    assert report["matched_pairs"] == 0
+
+
+def test_cross_target_stability_requires_overhead_kind() -> None:
+    plan = _plan()
+    plan["categories"][0]["pairs"][0]["kind"] = "model"
+
+    with pytest.raises(
+        experiment_run.ExperimentRunnerError,
+        match="kind='execution_target_overhead'",
+    ):
+        cross_target_stability.build_cross_target_stability_report(
+            plan,
+            feedback.FeedbackStore(),
+            EXPERIMENT_ID,
+        )
