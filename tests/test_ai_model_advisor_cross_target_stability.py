@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from tools.ai_model_advisor import cross_target_stability, execution_targets, experiment_run, feedback
+from tools.ai_model_advisor import (
+    cross_target_stability,
+    execution_targets,
+    experiment_run,
+    feedback,
+)
 
 
 EXPERIMENT_ID = "cross-debugging-01"
