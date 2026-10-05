@@ -116,6 +116,30 @@ def build_hive_promotion_rollback_finalization(
         rollback_receipt,
     )
 
+    category = promotion_preview.get("category")
+    change_id = promotion_preview.get("change_id")
+    scope = promotion_preview.get("scope")
+    transition = promotion_preview.get("selected_transition")
+    if not isinstance(category, str) or not category.strip():
+        raise HivePromotionRollbackFinalizeError(
+            "promotion preview must contain non-empty category"
+        )
+    if not isinstance(change_id, str) or not change_id.strip():
+        raise HivePromotionRollbackFinalizeError(
+            "promotion preview must contain non-empty change_id"
+        )
+    if scope not in {"queen", "worker", "both"}:
+        raise HivePromotionRollbackFinalizeError(
+            "promotion preview scope must be queen, worker, or both"
+        )
+    if not isinstance(transition, dict):
+        raise HivePromotionRollbackFinalizeError(
+            "promotion preview must contain selected_transition"
+        )
+    category = category.strip()
+    change_id = change_id.strip()
+    transition = deepcopy(transition)
+
     artifact_hashes = {
         "promotion_preview_sha256": _canonical_sha256(promotion_preview),
         "applied_lifecycle_sha256": _canonical_sha256(applied_lifecycle),
@@ -129,6 +153,10 @@ def build_hive_promotion_rollback_finalization(
         report = {
             "schema_version": 1,
             "host": "hive",
+            "category": category,
+            "change_id": change_id,
+            "scope": scope,
+            "transition": transition,
             "state": "blocked_rollback_audit",
             "rollback_verified_from_fresh_preflight": False,
             "safe_to_auto_apply": False,
@@ -144,6 +172,10 @@ def build_hive_promotion_rollback_finalization(
         report = {
             "schema_version": 1,
             "host": "hive",
+            "category": category,
+            "change_id": change_id,
+            "scope": scope,
+            "transition": transition,
             "state": "rollback_verified_from_fresh_preflight",
             "rollback_verified_from_fresh_preflight": True,
             "safe_to_auto_apply": False,
