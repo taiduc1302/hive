@@ -30,10 +30,24 @@ def test_capability_probe_is_offline_and_marks_single_ready(tmp_path) -> None:
             "provider_class": True,
             "post_transform_capture": True,
         },
+        config_probe=lambda _root: {
+            "importable": True,
+            "reasoning_effort_passthrough": True,
+            "config_keys": [
+                "llm.reasoning_effort",
+                "worker_llm.reasoning_effort",
+            ],
+        },
     )
 
     assert report["litellm"]["versions_match"] is True
     assert report["transport"]["single_call_evidence_ready"] is True
+    assert report["native_config"]["reasoning_effort_passthrough"] is True
+    assert report["controls"]["reasoning_effort"]["native_hive_config_passthrough"] is True
+    assert report["controls"]["reasoning_effort"]["config_keys"] == [
+        "llm.reasoning_effort",
+        "worker_llm.reasoning_effort",
+    ]
     assert report["controls"]["execution_modes"]["single"] == "supported_by_advisor_adapter"
     assert (
         report["controls"]["execution_modes"]["subagents"]
@@ -55,6 +69,11 @@ def test_capability_probe_warns_on_runtime_pin_mismatch(tmp_path) -> None:
             "provider_class": True,
             "post_transform_capture": True,
         },
+        config_probe=lambda _root: {
+            "importable": True,
+            "reasoning_effort_passthrough": True,
+            "config_keys": [],
+        },
     )
 
     assert report["litellm"]["versions_match"] is False
@@ -70,6 +89,11 @@ def test_capability_probe_fails_closed_without_wire_capture(tmp_path) -> None:
             "provider_class": True,
             "post_transform_capture": False,
         },
+        config_probe=lambda _root: {
+            "importable": True,
+            "reasoning_effort_passthrough": False,
+            "config_keys": [],
+        },
     )
 
     assert report["transport"]["single_call_evidence_ready"] is False
@@ -77,6 +101,7 @@ def test_capability_probe_fails_closed_without_wire_capture(tmp_path) -> None:
         "fail_closed_no_model_evidence"
     )
     assert any("post-transform request capture" in warning for warning in report["warnings"])
+    assert any("configuration.json reasoning_effort passthrough" in warning for warning in report["warnings"])
 
 
 def test_runtime_capability_markdown_surfaces_evidence_boundary(tmp_path) -> None:
@@ -88,9 +113,18 @@ def test_runtime_capability_markdown_surfaces_evidence_boundary(tmp_path) -> Non
             "provider_class": True,
             "post_transform_capture": True,
         },
+        config_probe=lambda _root: {
+            "importable": True,
+            "reasoning_effort_passthrough": True,
+            "config_keys": [
+                "llm.reasoning_effort",
+                "worker_llm.reasoning_effort",
+            ],
+        },
     )
 
     markdown = render_markdown(report)
     assert "Hive Runtime Capability Probe" in markdown
     assert "performs no provider/network call" in markdown
+    assert "Native config reasoning-effort passthrough: **True**" in markdown
     assert "`chatgpt_work`: external_host_not_hive" in markdown

@@ -12,10 +12,7 @@ _EFFICIENCY_TIE_EPSILON = 0.05
 
 
 def _config_text(config: dict[str, Any]) -> str:
-    return (
-        f"{config['model_id']} / {config['effort']} / "
-        f"{config['execution_mode']}"
-    )
+    return f"{config['model_id']} / {config['effort']} / {config['execution_mode']}"
 
 
 def _task_prefix(pair: dict[str, Any]) -> str:
@@ -63,19 +60,13 @@ def _side_stats(records: list[UsageRecord]) -> dict[str, Any]:
     outcome_scores = [_OUTCOME_VALUE[record.outcome] for record in records]
     retries = [record.retries for record in records]
     costs = [float(record.cost_usd) for record in records if record.cost_usd is not None]
-    latencies = [
-        float(record.latency_seconds)
-        for record in records
-        if record.latency_seconds is not None
-    ]
+    latencies = [float(record.latency_seconds) for record in records if record.latency_seconds is not None]
     return {
         "paired_observations": len(records),
         "success": sum(record.outcome == "success" for record in records),
         "partial": sum(record.outcome == "partial" for record in records),
         "failure": sum(record.outcome == "failure" for record in records),
-        "mean_outcome_score": (
-            round(mean(outcome_scores), 4) if outcome_scores else None
-        ),
+        "mean_outcome_score": (round(mean(outcome_scores), 4) if outcome_scores else None),
         "mean_retries": round(mean(retries), 4) if retries else None,
         "median_cost_usd": _median(costs),
         "median_latency_seconds": _median(latencies),
@@ -91,12 +82,7 @@ def _leader(a: float | None, b: float | None, *, lower_is_better: bool) -> str:
 
 
 def _success_metric(records: list[UsageRecord], field: str) -> float | None:
-    values = [
-        float(value)
-        for record in records
-        if record.outcome == "success"
-        if (value := getattr(record, field)) is not None
-    ]
+    values = [float(value) for record in records if record.outcome == "success" if (value := getattr(record, field)) is not None]
     return float(median(values)) if values else None
 
 
@@ -128,10 +114,7 @@ def _paired_efficiency(
     for task_id in shared_task_ids:
         primary_records = primary_by_task[task_id]
         challenger_records = challenger_by_task[task_id]
-        if (
-            primary_records[0].outcome != "success"
-            or challenger_records[0].outcome != "success"
-        ):
+        if primary_records[0].outcome != "success" or challenger_records[0].outcome != "success":
             continue
         metrics: list[tuple[float, float]] = []
 
@@ -219,22 +202,14 @@ def _evaluate_pair(
         shared_task_ids.append(task_id)
 
     primary_records = [primary_by_task[task_id][0] for task_id in shared_task_ids]
-    challenger_records = [
-        challenger_by_task[task_id][0] for task_id in shared_task_ids
-    ]
+    challenger_records = [challenger_by_task[task_id][0] for task_id in shared_task_ids]
     primary_stats = _side_stats(primary_records)
     challenger_stats = _side_stats(challenger_records)
 
-    primary_quality = [
-        _task_quality(primary_by_task[task_id]) for task_id in shared_task_ids
-    ]
-    challenger_quality = [
-        _task_quality(challenger_by_task[task_id]) for task_id in shared_task_ids
-    ]
+    primary_quality = [_task_quality(primary_by_task[task_id]) for task_id in shared_task_ids]
+    challenger_quality = [_task_quality(challenger_by_task[task_id]) for task_id in shared_task_ids]
     primary_quality_score = round(mean(primary_quality), 3) if primary_quality else 0.0
-    challenger_quality_score = (
-        round(mean(challenger_quality), 3) if challenger_quality else 0.0
-    )
+    challenger_quality_score = round(mean(challenger_quality), 3) if challenger_quality else 0.0
     quality_delta = round(primary_quality_score - challenger_quality_score, 3)
 
     primary_wins = 0
@@ -276,15 +251,9 @@ def _evaluate_pair(
         shared_task_ids,
         workload,
     )
-    if (
-        efficiency_tasks >= PAIRED_EFFICIENCY_MIN
-        and efficiency_delta > _EFFICIENCY_TIE_EPSILON
-    ):
+    if efficiency_tasks >= PAIRED_EFFICIENCY_MIN and efficiency_delta > _EFFICIENCY_TIE_EPSILON:
         weighted_efficiency_leader = "A"
-    elif (
-        efficiency_tasks >= PAIRED_EFFICIENCY_MIN
-        and efficiency_delta < -_EFFICIENCY_TIE_EPSILON
-    ):
+    elif efficiency_tasks >= PAIRED_EFFICIENCY_MIN and efficiency_delta < -_EFFICIENCY_TIE_EPSILON:
         weighted_efficiency_leader = "B"
     else:
         weighted_efficiency_leader = "tie"
@@ -308,11 +277,7 @@ def _evaluate_pair(
             winner_side = "challenger"
             decision_basis = "outcome_quality"
         else:
-            secondary = [
-                leader
-                for leader in (retry_leader, weighted_efficiency_leader)
-                if leader != "tie"
-            ]
+            secondary = [leader for leader in (retry_leader, weighted_efficiency_leader) if leader != "tie"]
             if secondary and len(set(secondary)) == 1:
                 winner_side = "primary" if secondary[0] == "A" else "challenger"
                 decision = f"{winner_side}_leads"
@@ -334,9 +299,7 @@ def _evaluate_pair(
         conclusion = "tie"
     else:
         conclusion = "insufficient_evidence"
-    suggested_winner = (
-        "A" if winner_side == "primary" else "B" if winner_side == "challenger" else None
-    )
+    suggested_winner = "A" if winner_side == "primary" else "B" if winner_side == "challenger" else None
 
     confidence, confidence_score = _confidence(
         paired_tasks,
@@ -445,14 +408,9 @@ def evaluate_experiment_plan(
             results.append(_evaluate_pair(pair, workload, feedback))
 
     ready = [result for result in results if result["policy_ready"]]
-    decided = [
-        result
-        for result in ready
-        if result["decision"] in {"primary_leads", "challenger_leads"}
-    ]
+    decided = [result for result in ready if result["decision"] in {"primary_leads", "challenger_leads"}]
     status_counts = {
-        status: sum(result["status"] == status for result in results)
-        for status in ("planned", "collecting", "ready", "decided", "tradeoff")
+        status: sum(result["status"] == status for result in results) for status in ("planned", "collecting", "ready", "decided", "tradeoff")
     }
     return {
         "paired_task_threshold": PAIRED_EFFICIENCY_MIN,
@@ -462,10 +420,7 @@ def evaluate_experiment_plan(
         "decided_experiments": len(decided),
         "unresolved_experiments": len(results) - len(decided),
         "status_counts": status_counts,
-        "confidence_note": (
-            "confidence_score is a heuristic evidence-strength indicator, "
-            "not a statistical probability or p-value"
-        ),
+        "confidence_note": ("confidence_score is a heuristic evidence-strength indicator, not a statistical probability or p-value"),
         "evaluations": results,
         "results": results,
     }
@@ -487,10 +442,7 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
         "",
         f"Note: {report['confidence_note']}.",
         "",
-        (
-            "The evaluator is descriptive only and never writes routing policy. "
-            "Ambiguous duplicate attempts are excluded rather than guessed."
-        ),
+        ("The evaluator is descriptive only and never writes routing policy. Ambiguous duplicate attempts are excluded rather than guessed."),
         "",
     ]
 
@@ -505,10 +457,7 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
         ]
     )
     for result in results:
-        quality = (
-            f"{result['primary_quality_score']:.3f}/"
-            f"{result['challenger_quality_score']:.3f}"
-        )
+        quality = f"{result['primary_quality_score']:.3f}/{result['challenger_quality_score']:.3f}"
         lines.append(
             f"| {result['category']} | {result['kind']} | {result['status']} | "
             f"{result['paired_tasks']} | {quality} | {result['efficiency_paired_tasks']} | "
@@ -532,27 +481,14 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
                 f"- B: `{_config_text(result['challenger'])}`",
                 f"- Task ID prefix: `{result['task_id_prefix']}`",
                 f"- Complete paired tasks: **{result['paired_tasks']}**",
-                (
-                    "- Ambiguous duplicate tasks excluded: "
-                    f"**{len(result['ambiguous_task_ids'])}**"
-                ),
-                (
-                    "- Incomplete one-sided tasks: "
-                    f"**{len(result['incomplete_task_ids'])}**"
-                ),
-                (
-                    "- Quality wins A/B/tie: "
-                    f"**{result['primary_quality_wins']}/"
-                    f"{result['challenger_quality_wins']}/{result['quality_ties']}**"
-                ),
+                (f"- Ambiguous duplicate tasks excluded: **{len(result['ambiguous_task_ids'])}**"),
+                (f"- Incomplete one-sided tasks: **{len(result['incomplete_task_ids'])}**"),
+                (f"- Quality wins A/B/tie: **{result['primary_quality_wins']}/{result['challenger_quality_wins']}/{result['quality_ties']}**"),
                 f"- Quality leader: **{result['quality_leader']}**",
                 f"- Retry leader: **{result['retry_leader']}**",
                 f"- Cost leader: **{result['cost_leader']}**",
                 f"- Latency leader: **{result['latency_leader']}**",
-                (
-                    "- Quality delta A-B: "
-                    f"**{result['quality_delta_primary_minus_challenger']:+.3f}**"
-                ),
+                (f"- Quality delta A-B: **{result['quality_delta_primary_minus_challenger']:+.3f}**"),
                 (
                     "- Workload-weighted efficiency delta (positive favors A): "
                     f"**{result['efficiency_delta_primary_advantage']:+.3f}** "
@@ -562,10 +498,7 @@ def experiment_evaluation_markdown(report: dict[str, Any]) -> str:
                 f"- Decision: **{result['decision']}** via `{result['decision_basis']}`",
                 f"- Confidence: **{result['confidence']} ({result['confidence_score']:.2f})**",
                 f"- Policy-ready: **{'yes' if result['policy_ready'] else 'no'}**",
-                (
-                    "- Additional paired tasks needed: "
-                    f"**{result['additional_paired_tasks_needed']}**"
-                ),
+                (f"- Additional paired tasks needed: **{result['additional_paired_tasks_needed']}**"),
                 "",
             ]
         )

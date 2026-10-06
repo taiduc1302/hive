@@ -56,10 +56,7 @@ def routing_matrix_markdown(rows: list[dict[str, Any]], registry_as_of: str) -> 
         alternatives = row["alternatives"]
         alt_one = _config_label(alternatives[0]) if alternatives else "—"
         alt_two = _config_label(alternatives[1]) if len(alternatives) > 1 else "—"
-        lines.append(
-            f"| {row['category']} | {row['activity_count']} | "
-            f"{_config_label(row['primary'])} | {alt_one} | {alt_two} |"
-        )
+        lines.append(f"| {row['category']} | {row['activity_count']} | {_config_label(row['primary'])} | {alt_one} | {alt_two} |")
 
     lines.extend(["", "## Category details", ""])
     for row in rows:

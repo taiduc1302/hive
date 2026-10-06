@@ -110,21 +110,14 @@ def build_preview(
     if task_id is None:
         task_id, _ = next_task_id(pair, feedback)
     run_order = execution_order(pair, task_id, order)
-    payloads = {
-        side: _redacted_preview_payload(
-            runner_payload(pair, experiment_id, side, task_id, task)
-        )
-        for side in ("A", "B")
-    }
+    payloads = {side: _redacted_preview_payload(runner_payload(pair, experiment_id, side, task_id, task)) for side in ("A", "B")}
     source_ids = [
         f"benchmark:{experiment_id}:{task_id}:a",
         f"benchmark:{experiment_id}:{task_id}:b",
     ]
     duplicates = sorted(set(source_ids) & feedback.source_ids)
     if duplicates:
-        raise ExperimentRunnerError(
-            "Benchmark source ID already exists: " + ", ".join(duplicates)
-        )
+        raise ExperimentRunnerError("Benchmark source ID already exists: " + ", ".join(duplicates))
     return {
         "mode": "preview",
         "experiment_id": experiment_id,
@@ -154,10 +147,7 @@ def preview_markdown(preview: dict[str, Any]) -> str:
         f"Category: **{preview['category']}**",
         f"Kind: **{preview['kind']}**",
         f"Saved status: **{preview.get('saved_status') or 'unknown'}**",
-        (
-            f"Live complete A/B pairs: **{preview['live_complete_pairs']} / "
-            f"{preview['quality_threshold']}**"
-        ),
+        (f"Live complete A/B pairs: **{preview['live_complete_pairs']} / {preview['quality_threshold']}**"),
         f"Task ID: `{preview['task_id']}`",
         f"Task SHA-256: `{preview['task_sha256']}`",
         f"Execution order: **{' → '.join(preview['order'])}**",
@@ -167,10 +157,7 @@ def preview_markdown(preview: dict[str, Any]) -> str:
     ]
     for side in ("A", "B"):
         config = preview["payloads"][side]["configuration"]
-        lines.append(
-            f"- **{side}**: `{config['provider']} / {config['model_id']} / "
-            f"{config['effort']} / {config['execution_mode']}`"
-        )
+        lines.append(f"- **{side}**: `{config['provider']} / {config['model_id']} / {config['effort']} / {config['execution_mode']}`")
     lines.extend(
         [
             "",
@@ -206,12 +193,7 @@ def _write_json(path: str | None, payload: dict[str, Any]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Preview or execute one saved AI Model Advisor A/B experiment. "
-            "Execution is opt-in with --apply."
-        )
-    )
+    parser = argparse.ArgumentParser(description=("Preview or execute one saved AI Model Advisor A/B experiment. Execution is opt-in with --apply."))
     parser.add_argument("--plan", required=True, help="JSON produced by experiment-plan")
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--feedback", required=True, help="Advisor feedback JSONL")
@@ -229,10 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--use-target",
         action="store_true",
-        help=(
-            "Resolve the canonical adapter from the plan's execution_target. "
-            "Use this for bound plans instead of repeating --runner argv."
-        ),
+        help=("Resolve the canonical adapter from the plan's execution_target. Use this for bound plans instead of repeating --runner argv."),
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -302,24 +281,15 @@ def main(argv: list[str] | None = None) -> int:
         _write_json(args.json_output, preview)
         return 0
 
-    if target_requires_external_judge(plan) and not (
-        args.expected_output_file or args.judge
-    ):
+    if target_requires_external_judge(plan) and not (args.expected_output_file or args.judge):
         raise ExperimentRunnerError(
-            "bound execution target requires a deterministic outcome judge; "
-            "provide --expected-output-file or --judge before --apply"
+            "bound execution target requires a deterministic outcome judge; provide --expected-output-file or --judge before --apply"
         )
 
     try:
-        runner_argv = (
-            canonical_runner_for_target(plan)
-            if args.use_target
-            else list(args.runner or [])
-        )
+        runner_argv = canonical_runner_for_target(plan) if args.use_target else list(args.runner or [])
         if not runner_argv:
-            raise ExperimentRunnerError(
-                "--use-target or --runner is required when --apply is used"
-            )
+            raise ExperimentRunnerError("--use-target or --runner is required when --apply is used")
         validate_runner_for_target(plan, runner_argv)
     except ExperimentTargetError as exc:
         raise ExperimentRunnerError(str(exc)) from exc

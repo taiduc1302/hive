@@ -452,13 +452,16 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
     if not worker_llm:
         return get_llm_extra_kwargs()
 
+    base: dict[str, Any] = {}
+    handled = False
     if worker_llm.get("use_claude_code_subscription"):
         api_key = get_worker_api_key()
         if api_key:
-            return {
+            base = {
                 "extra_headers": {"authorization": f"Bearer {api_key}"},
             }
-    if worker_llm.get("use_codex_subscription"):
+            handled = True
+    if not handled and worker_llm.get("use_codex_subscription"):
         api_key = get_worker_api_key()
         if api_key:
             headers: dict[str, str] = {
@@ -473,14 +476,21 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
                     headers["ChatGPT-Account-Id"] = account_id
             except ImportError:
                 pass
-            return {
+            base = {
                 "extra_headers": headers,
                 "store": False,
                 "allowed_openai_params": ["store"],
             }
-    if worker_llm.get("provider") == "ollama":
-        return {"num_ctx": worker_llm.get("num_ctx", 16384)}
-    return {}
+            handled = True
+    if not handled and worker_llm.get("provider") == "ollama":
+        base = {"num_ctx": worker_llm.get("num_ctx", 16384)}
+        handled = True
+    if not handled:
+        extra_body = worker_llm.get("extra_body")
+        if isinstance(extra_body, dict) and extra_body:
+            base = {"extra_body": extra_body}
+
+    return _with_reasoning_effort(worker_llm, base)
 
 
 DEFAULT_MAX_CONTEXT_TOKENS = 32_000
@@ -932,25 +942,46 @@ def get_api_base() -> str | None:
     return None
 
 
+def _with_reasoning_effort(
+    llm_section: dict[str, Any],
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge an optional config-level reasoning effort into LiteLLM kwargs.
+
+    Absence or null preserves the provider default. A configured value must
+    be a non-empty string; invalid config fails loudly instead of silently
+    degrading to a different reasoning mode.
+    """
+    result = dict(kwargs)
+    if "reasoning_effort" not in llm_section or llm_section.get("reasoning_effort") is None:
+        return result
+
+    effort = llm_section.get("reasoning_effort")
+    if not isinstance(effort, str) or not effort.strip():
+        raise ValueError("reasoning_effort must be a non-empty string or null")
+    result["reasoning_effort"] = effort.strip()
+    return result
+
+
 def get_llm_extra_kwargs() -> dict[str, Any]:
-    """Return extra kwargs for LiteLLMProvider (e.g. OAuth headers).
+    """Return extra kwargs for LiteLLMProvider.
 
-    When ``use_claude_code_subscription`` is enabled, returns
-    ``extra_headers`` with the OAuth Bearer token so that litellm's
-    built-in Anthropic OAuth handler adds the required beta headers.
-
-    When ``use_codex_subscription`` is enabled, returns
-    ``extra_headers`` with the Bearer token, ``ChatGPT-Account-Id``,
-    and ``store=False`` (required by the ChatGPT backend).
+    Existing OAuth/provider-specific kwargs are preserved. When
+    ``llm.reasoning_effort`` is configured, it is merged into the kwargs
+    passed to ``LiteLLMProvider``; null/absence keeps the provider default.
     """
     llm = get_hive_config().get("llm", {})
+    base: dict[str, Any] = {}
+    handled = False
+
     if llm.get("use_claude_code_subscription"):
         api_key = get_api_key()
         if api_key:
-            return {
+            base = {
                 "extra_headers": {"authorization": f"Bearer {api_key}"},
             }
-    if llm.get("use_codex_subscription"):
+            handled = True
+    if not handled and llm.get("use_codex_subscription"):
         api_key = get_api_key()
         if api_key:
             headers: dict[str, str] = {
@@ -965,25 +996,21 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
                     headers["ChatGPT-Account-Id"] = account_id
             except ImportError:
                 pass
-            return {
+            base = {
                 "extra_headers": headers,
                 "store": False,
                 "allowed_openai_params": ["store"],
             }
-    if llm.get("provider") == "ollama":
-        # Pass num_ctx to Ollama so it doesn't silently truncate the ~9.5k Queen prompt.
-        # Ollama's default num_ctx is only 2048. We set it to 16384 here so LiteLLM
-        # passes it through as a provider-specific option.
-        return {"num_ctx": llm.get("num_ctx", 16384)}
-    # Generic passthrough: let configuration.json forward a raw ``extra_body``
-    # to LiteLLM/the OpenAI SDK (e.g. vLLM's ``chat_template_kwargs`` to disable
-    # a model's default thinking). Applied to every LLM call, including the
-    # small recall/judge aux calls that otherwise burn their token budget on
-    # hidden reasoning and return empty.
-    extra_body = llm.get("extra_body")
-    if isinstance(extra_body, dict) and extra_body:
-        return {"extra_body": extra_body}
-    return {}
+            handled = True
+    if not handled and llm.get("provider") == "ollama":
+        base = {"num_ctx": llm.get("num_ctx", 16384)}
+        handled = True
+    if not handled:
+        extra_body = llm.get("extra_body")
+        if isinstance(extra_body, dict) and extra_body:
+            base = {"extra_body": extra_body}
+
+    return _with_reasoning_effort(llm, base)
 
 
 # ---------------------------------------------------------------------------

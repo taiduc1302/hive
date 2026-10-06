@@ -12,6 +12,7 @@ from .execution_targets import (
 )
 from .experiment_run import ExperimentRunnerError, find_experiment
 from .experiment_target import target_summary
+from .registry import ModelRegistry
 from .runtime_capabilities import build_capability_report
 
 
@@ -41,15 +42,44 @@ def _hive_compatible_target_blockers(blockers: list[str]) -> list[str]:
     ]
 
 
+def _catalog_configuration_blockers(
+    configuration: dict[str, Any],
+    registry: ModelRegistry,
+) -> list[str]:
+    provider = str(configuration.get("provider") or "")
+    model_id = str(configuration.get("model_id") or "")
+    effort = str(configuration.get("effort") or "")
+
+    model = next(
+        (candidate for candidate in registry.models if candidate.provider == provider and candidate.model_id == model_id),
+        None,
+    )
+    if model is None:
+        return [
+            f"Advisor registry does not recognize {provider or 'missing'}/{model_id or 'missing'}; "
+            "refresh the official model registry before spending benchmark credits"
+        ]
+
+    blockers: list[str] = []
+    if model.status in {"retired", "deprecated"}:
+        blockers.append(f"Advisor registry marks {provider}/{model_id} as {model.status}")
+    if effort and effort != "default" and effort not in model.efforts:
+        supported = ", ".join(model.efforts) or "provider default only"
+        blockers.append(f"Advisor registry does not list effort={effort!r} for {provider}/{model_id}; supported explicit efforts: {supported}")
+    return blockers
+
+
 def evaluate_hive_experiment_preflight(
     plan: dict[str, Any],
     experiment_id: str,
     *,
     capability_report: dict[str, Any] | None = None,
+    registry: ModelRegistry | None = None,
 ) -> dict[str, Any]:
     """Check whether a saved pair is executable by the current Hive Advisor adapter."""
     pair = find_experiment(plan, experiment_id)
     capabilities = capability_report or build_capability_report()
+    catalog = registry or ModelRegistry()
     single_ready = bool(capabilities.get("transport", {}).get("single_call_evidence_ready"))
     profile = profile_for_host("hive")
     raw_target = plan.get("execution_target")
@@ -72,7 +102,9 @@ def evaluate_hive_experiment_preflight(
         model_id = str(config.get("model_id") or "")
         effort = str(config.get("effort") or "")
 
+        catalog_blockers = _catalog_configuration_blockers(config, catalog)
         side_blockers = configuration_blockers(config, profile)
+        side_blockers.extend(catalog_blockers)
         if not single_ready:
             side_blockers.append("Hive single-call wire-evidence transport is not ready in this runtime")
 
@@ -86,6 +118,8 @@ def evaluate_hive_experiment_preflight(
                 "execution_mode": execution_mode,
             },
             "ready": not side_blockers,
+            "catalog_ready": not catalog_blockers,
+            "catalog_blockers": catalog_blockers,
             "blockers": side_blockers,
         }
 
@@ -104,8 +138,14 @@ def evaluate_hive_experiment_preflight(
         "sides": sides,
         "blockers": blockers,
         "runtime": capabilities,
+        "catalog": {
+            "as_of": catalog.as_of,
+            "network_calls_performed": False,
+            "runtime_support_proven": False,
+        },
         "evidence_boundary": (
-            "Preflight proves local host plumbing and execution-target compatibility only. "
+            "Preflight proves local host plumbing, execution-target compatibility, and "
+            "catalog consistency only. Registry validation is not runtime/provider proof. "
             "A real --apply run must still prove the exact model and effort on Hive's "
             "post-transform request body before evidence is accepted."
         ),
@@ -149,9 +189,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Preflight one saved experiment against the current Hive execution adapter."
-    )
+    parser = argparse.ArgumentParser(description="Preflight one saved experiment against the current Hive execution adapter.")
     parser.add_argument("--plan", required=True, help="JSON produced by experiment-plan")
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")
