@@ -1,0 +1,33 @@
+name: Temporary Advisor v0.20 Format
+
+on:
+  push:
+    branches:
+      - feature/ai-model-advisor-v0.20-post-merge
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ai-model-advisor-v0.20-post-merge
+      - uses: astral-sh/setup-uv@v4
+      - name: Format targeted core files
+        run: |
+          uv run --project core ruff format core/framework/config.py core/tests/test_config.py
+          git diff --check
+      - name: Commit formatter output
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core/framework/config.py core/tests/test_config.py
+          git commit -m "style: format v0.20 Hive reasoning-effort bridge"
+          git push origin HEAD:feature/ai-model-advisor-v0.20-post-merge
