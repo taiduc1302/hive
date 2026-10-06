@@ -1,1 +1,0 @@
-"""Credential-specific tests."""

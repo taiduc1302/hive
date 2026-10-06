@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "tools": {
-      "command": "python",
-      "args": ["-m", "aden_tools.mcp_server", "--stdio"],
-      "cwd": "tools"
-    }
-  }
-}
