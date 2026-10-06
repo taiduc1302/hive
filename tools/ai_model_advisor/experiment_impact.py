@@ -28,9 +28,7 @@ def _config_text(config: dict[str, Any] | Recommendation) -> str:
 def _workload_from_category(category: dict[str, Any]) -> WorkloadProfile:
     data = category.get("workload") or {}
     allowed = set(WorkloadProfile.__dataclass_fields__)
-    return WorkloadProfile(
-        **{key: value for key, value in data.items() if key in allowed}
-    )
+    return WorkloadProfile(**{key: value for key, value in data.items() if key in allowed})
 
 
 def _find_model(registry: ModelRegistry, model_id: str) -> ModelProfile | None:
@@ -110,19 +108,11 @@ def _resolve_scope(
     saved = plan.get("routing_scope") or {}
     if providers is None:
         saved_providers = saved.get("providers")
-        resolved_providers = (
-            [str(provider) for provider in saved_providers]
-            if isinstance(saved_providers, list) and saved_providers
-            else None
-        )
+        resolved_providers = [str(provider) for provider in saved_providers] if isinstance(saved_providers, list) and saved_providers else None
     else:
         resolved_providers = list(providers)
 
-    resolved_limited = (
-        bool(saved.get("include_limited", False))
-        if include_limited is None
-        else bool(include_limited)
-    )
+    resolved_limited = bool(saved.get("include_limited", False)) if include_limited is None else bool(include_limited)
     return resolved_providers, resolved_limited
 
 
@@ -149,10 +139,7 @@ def build_experiment_impact(
         providers,
         include_limited,
     )
-    categories = {
-        str(category.get("category") or ""): category
-        for category in plan.get("categories", [])
-    }
+    categories = {str(category.get("category") or ""): category for category in plan.get("categories", [])}
     impacts: list[dict[str, Any]] = []
 
     for result in evaluation["results"]:
@@ -231,20 +218,14 @@ def build_experiment_impact(
                 "router_aligned": impact_status == "aligned",
                 "experiment_winner": winner,
                 "experiment_loser": loser,
-                "winner_current_score": (
-                    winner_scored.as_dict() if winner_scored else None
-                ),
+                "winner_current_score": (winner_scored.as_dict() if winner_scored else None),
                 "loser_current_score": loser_scored.as_dict() if loser_scored else None,
                 "winner_score_gap_to_current": gap,
                 "next_action": _next_action(impact_status, result, gap),
             }
         )
 
-    decided_impacts = [
-        impact
-        for impact in impacts
-        if impact["experiment_decision"] in _DIRECTIONAL_DECISIONS
-    ]
+    decided_impacts = [impact for impact in impacts if impact["experiment_decision"] in _DIRECTIONAL_DECISIONS]
     return {
         "registry_as_of": registry.as_of,
         "routing_scope_used": {
@@ -253,12 +234,8 @@ def build_experiment_impact(
         },
         "experiments": len(impacts),
         "decided_experiments": len(decided_impacts),
-        "aligned_decided_experiments": sum(
-            impact["router_aligned"] for impact in decided_impacts
-        ),
-        "misaligned_decided_experiments": sum(
-            not impact["router_aligned"] for impact in decided_impacts
-        ),
+        "aligned_decided_experiments": sum(impact["router_aligned"] for impact in decided_impacts),
+        "misaligned_decided_experiments": sum(not impact["router_aligned"] for impact in decided_impacts),
         "note": (
             "Impact analysis is read-only. A fixed A/B winner is evidence, not an "
             "automatic policy override; the live router may still prefer another "
@@ -338,15 +315,8 @@ def experiment_impact_markdown(report: dict[str, Any]) -> str:
                 ]
             )
         if impact["winner_score_gap_to_current"] is not None:
-            lines.append(
-                "- Winner minus current-router score: "
-                f"**{impact['winner_score_gap_to_current']:+.3f}**"
-            )
-        lines.append(
-            "- Next action: `"
-            + str(impact["next_action"].get("type") or "review")
-            + "`"
-        )
+            lines.append(f"- Winner minus current-router score: **{impact['winner_score_gap_to_current']:+.3f}**")
+        lines.append("- Next action: `" + str(impact["next_action"].get("type") or "review") + "`")
         lines.append("")
 
     return "\n".join(lines)

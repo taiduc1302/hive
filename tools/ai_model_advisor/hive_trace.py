@@ -80,9 +80,7 @@ def _normalize_model(raw_model: str, registry: ModelRegistry) -> ModelProfile | 
     matches = [
         model
         for model in registry.models
-        if raw == model.model_id.lower()
-        or raw.endswith("/" + model.model_id.lower())
-        or raw.endswith(":" + model.model_id.lower())
+        if raw == model.model_id.lower() or raw.endswith("/" + model.model_id.lower()) or raw.endswith(":" + model.model_id.lower())
     ]
     if len(matches) == 1:
         return matches[0]
@@ -125,11 +123,7 @@ def _outcome_from_detail(detail: dict[str, Any] | None) -> str | None:
 
 
 def _outcome_from_events(group: _TraceGroup, execution_group_count: int) -> str | None:
-    verdicts = [
-        str((event.get("data") or {}).get("action") or "").upper()
-        for event in group.events
-        if event.get("type") == "judge_verdict"
-    ]
+    verdicts = [str((event.get("data") or {}).get("action") or "").upper() for event in group.events if event.get("type") == "judge_verdict"]
     verdicts = [verdict for verdict in verdicts if verdict]
     if verdicts:
         if verdicts[-1] == "ACCEPT":
@@ -189,11 +183,7 @@ def _turn_data(turn: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sum_positive_float(turns: list[dict[str, Any]], field: str) -> float | None:
-    values = [
-        float(value)
-        for turn in turns
-        if isinstance((value := _turn_data(turn).get(field)), (int, float)) and value > 0
-    ]
+    values = [float(value) for turn in turns if isinstance((value := _turn_data(turn).get(field)), (int, float)) and value > 0]
     return round(sum(values), 8) if values else None
 
 
@@ -201,9 +191,7 @@ def _sum_optional_float(turns: list[dict[str, Any]], field: str) -> float | None
     values = [
         float(value)
         for turn in turns
-        if field in _turn_data(turn)
-        and isinstance((value := _turn_data(turn).get(field)), (int, float))
-        and value >= 0
+        if field in _turn_data(turn) and isinstance((value := _turn_data(turn).get(field)), (int, float)) and value >= 0
     ]
     return round(sum(values), 8) if values else None
 
@@ -214,11 +202,7 @@ def _sum_token_metric(
     *,
     allow_zero: bool,
 ) -> int | None:
-    values = [
-        int(value)
-        for turn in turns
-        if isinstance((value := _turn_data(turn).get(field)), (int, float)) and value >= 0
-    ]
+    values = [int(value) for turn in turns if isinstance((value := _turn_data(turn).get(field)), (int, float)) and value >= 0]
     if not values:
         return None
     total = sum(values)
@@ -307,16 +291,8 @@ def import_hive_trace(
         input_tokens = _sum_token_metric(turns, "input_tokens", allow_zero=False)
         output_tokens = _sum_token_metric(turns, "output_tokens", allow_zero=False)
         token_telemetry_present = input_tokens is not None or output_tokens is not None
-        cached_tokens = (
-            _sum_token_metric(turns, "cached_tokens", allow_zero=True)
-            if token_telemetry_present
-            else None
-        )
-        cache_creation_tokens = (
-            _sum_token_metric(turns, "cache_creation_tokens", allow_zero=True)
-            if token_telemetry_present
-            else None
-        )
+        cached_tokens = _sum_token_metric(turns, "cached_tokens", allow_zero=True) if token_telemetry_present else None
+        cache_creation_tokens = _sum_token_metric(turns, "cache_creation_tokens", allow_zero=True) if token_telemetry_present else None
         credits = _sum_optional_float(turns, "credits")
 
         latency_seconds: float | None = None
@@ -327,8 +303,7 @@ def import_hive_trace(
         judge_retries = sum(
             1
             for event in group.events
-            if event.get("type") == "judge_verdict"
-            and str((event.get("data") or {}).get("action") or "").upper() == "RETRY"
+            if event.get("type") == "judge_verdict" and str((event.get("data") or {}).get("action") or "").upper() == "RETRY"
         )
         stream_retries = sum(1 for event in group.events if event.get("type") == "node_retry")
         detail_retries = int(detail.get("retry_count") or 0) if detail else 0
@@ -352,10 +327,7 @@ def import_hive_trace(
                 task_category=task_category,
                 task_id=task_id,
                 source_id=f"hive:{group.execution_id}:{group.node_id}",
-                note=(
-                    f"Imported from Hive session telemetry; node={group.node_id}; "
-                    f"llm_turns={len(turns)}"
-                ),
+                note=(f"Imported from Hive session telemetry; node={group.node_id}; llm_turns={len(turns)}"),
             )
         )
 
@@ -418,11 +390,7 @@ def import_report_markdown(
     )
     for record in report.records:
         latency = f"{record.latency_seconds:.3f}s" if record.latency_seconds else "—"
-        token_pair = (
-            f"{record.input_tokens}/{record.output_tokens}"
-            if record.input_tokens is not None or record.output_tokens is not None
-            else "—"
-        )
+        token_pair = f"{record.input_tokens}/{record.output_tokens}" if record.input_tokens is not None or record.output_tokens is not None else "—"
         cache_read = str(record.cached_tokens) if record.cached_tokens is not None else "—"
         cost = f"${record.cost_usd:.6f}" if record.cost_usd is not None else "—"
         credits = f"{record.credits:.4f}" if record.credits is not None else "—"

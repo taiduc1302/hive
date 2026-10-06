@@ -51,11 +51,7 @@ def _catalog_configuration_blockers(
     effort = str(configuration.get("effort") or "")
 
     model = next(
-        (
-            candidate
-            for candidate in registry.models
-            if candidate.provider == provider and candidate.model_id == model_id
-        ),
+        (candidate for candidate in registry.models if candidate.provider == provider and candidate.model_id == model_id),
         None,
     )
     if model is None:
@@ -66,15 +62,10 @@ def _catalog_configuration_blockers(
 
     blockers: list[str] = []
     if model.status in {"retired", "deprecated"}:
-        blockers.append(
-            f"Advisor registry marks {provider}/{model_id} as {model.status}"
-        )
+        blockers.append(f"Advisor registry marks {provider}/{model_id} as {model.status}")
     if effort and effort != "default" and effort not in model.efforts:
         supported = ", ".join(model.efforts) or "provider default only"
-        blockers.append(
-            f"Advisor registry does not list effort={effort!r} for {provider}/{model_id}; "
-            f"supported explicit efforts: {supported}"
-        )
+        blockers.append(f"Advisor registry does not list effort={effort!r} for {provider}/{model_id}; supported explicit efforts: {supported}")
     return blockers
 
 
@@ -198,9 +189,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Preflight one saved experiment against the current Hive execution adapter."
-    )
+    parser = argparse.ArgumentParser(description="Preflight one saved experiment against the current Hive execution adapter.")
     parser.add_argument("--plan", required=True, help="JSON produced by experiment-plan")
     parser.add_argument("--experiment-id", required=True)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")
