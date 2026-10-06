@@ -488,6 +488,7 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
 
     return _with_reasoning_effort(worker_llm, base)
 
+
 DEFAULT_MAX_CONTEXT_TOKENS = 32_000
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
@@ -1002,6 +1003,7 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
             base = {"extra_body": extra_body}
 
     return _with_reasoning_effort(llm, base)
+
 
 # ---------------------------------------------------------------------------
 # RuntimeConfig – shared across agent templates

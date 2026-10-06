@@ -61,8 +61,7 @@ class TestReasoningEffortConfig:
     def test_worker_reasoning_effort_merges_with_ollama_context(self, tmp_path, monkeypatch):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
-            '{"worker_llm":{"provider":"ollama","model":"local","num_ctx":32768,'
-            '"reasoning_effort":"medium"}}',
+            '{"worker_llm":{"provider":"ollama","model":"local","num_ctx":32768,"reasoning_effort":"medium"}}',
             encoding="utf-8",
         )
         monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
@@ -86,9 +85,7 @@ class TestReasoningEffortConfig:
     def test_invalid_reasoning_effort_is_rejected(self, tmp_path, monkeypatch, value):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
-            __import__("json").dumps(
-                {"llm": {"provider": "openai", "model": "gpt-test", "reasoning_effort": value}}
-            ),
+            __import__("json").dumps({"llm": {"provider": "openai", "model": "gpt-test", "reasoning_effort": value}}),
             encoding="utf-8",
         )
         monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
