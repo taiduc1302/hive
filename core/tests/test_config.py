@@ -103,6 +103,37 @@ class TestReasoningEffortConfig:
 
         assert get_llm_extra_kwargs() == {}
 
+    def test_main_subscription_without_token_falls_back_to_extra_body(self, tmp_path, monkeypatch):
+        config_file = tmp_path / "configuration.json"
+        config_file.write_text(
+            '{"llm":{"provider":"openai","model":"gpt-test","use_claude_code_subscription":true,'
+            '"extra_body":{"chat_template_kwargs":{"enable_thinking":false}},'
+            '"reasoning_effort":"medium"}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
+        monkeypatch.setattr("framework.config.get_api_key", lambda: None)
+
+        assert get_llm_extra_kwargs() == {
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+            "reasoning_effort": "medium",
+        }
+
+    def test_worker_subscription_without_token_falls_back_to_ollama(self, tmp_path, monkeypatch):
+        config_file = tmp_path / "configuration.json"
+        config_file.write_text(
+            '{"worker_llm":{"provider":"ollama","model":"local","use_claude_code_subscription":true,'
+            '"num_ctx":32768,"reasoning_effort":"low"}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
+        monkeypatch.setattr("framework.config.get_worker_api_key", lambda: None)
+
+        assert get_worker_llm_extra_kwargs() == {
+            "num_ctx": 32768,
+            "reasoning_effort": "low",
+        }
+
 
 class TestOpenRouterConfig:
     """OpenRouter config composition and fallback behavior."""
