@@ -453,13 +453,15 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
         return get_llm_extra_kwargs()
 
     base: dict[str, Any] = {}
+    handled = False
     if worker_llm.get("use_claude_code_subscription"):
         api_key = get_worker_api_key()
         if api_key:
             base = {
                 "extra_headers": {"authorization": f"Bearer {api_key}"},
             }
-    elif worker_llm.get("use_codex_subscription"):
+            handled = True
+    if not handled and worker_llm.get("use_codex_subscription"):
         api_key = get_worker_api_key()
         if api_key:
             headers: dict[str, str] = {
@@ -479,9 +481,11 @@ def get_worker_llm_extra_kwargs() -> dict[str, Any]:
                 "store": False,
                 "allowed_openai_params": ["store"],
             }
-    elif worker_llm.get("provider") == "ollama":
+            handled = True
+    if not handled and worker_llm.get("provider") == "ollama":
         base = {"num_ctx": worker_llm.get("num_ctx", 16384)}
-    else:
+        handled = True
+    if not handled:
         extra_body = worker_llm.get("extra_body")
         if isinstance(extra_body, dict) and extra_body:
             base = {"extra_body": extra_body}
@@ -968,6 +972,7 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
     """
     llm = get_hive_config().get("llm", {})
     base: dict[str, Any] = {}
+    handled = False
 
     if llm.get("use_claude_code_subscription"):
         api_key = get_api_key()
@@ -975,7 +980,8 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
             base = {
                 "extra_headers": {"authorization": f"Bearer {api_key}"},
             }
-    elif llm.get("use_codex_subscription"):
+            handled = True
+    if not handled and llm.get("use_codex_subscription"):
         api_key = get_api_key()
         if api_key:
             headers: dict[str, str] = {
@@ -995,9 +1001,11 @@ def get_llm_extra_kwargs() -> dict[str, Any]:
                 "store": False,
                 "allowed_openai_params": ["store"],
             }
-    elif llm.get("provider") == "ollama":
+            handled = True
+    if not handled and llm.get("provider") == "ollama":
         base = {"num_ctx": llm.get("num_ctx", 16384)}
-    else:
+        handled = True
+    if not handled:
         extra_body = llm.get("extra_body")
         if isinstance(extra_body, dict) and extra_body:
             base = {"extra_body": extra_body}
