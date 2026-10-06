@@ -80,7 +80,7 @@ def test_native_worker_config_forwards_reasoning_effort(tmp_path) -> None:
     }
 
 
-@pytest.mark.parametrize("value", ["", "   ", 3, None])
+@pytest.mark.parametrize("value", ["", "   ", 3])
 def test_native_hive_config_rejects_invalid_reasoning_effort(tmp_path, value) -> None:
     config = _load_config_module()
     config.HIVE_CONFIG_FILE = _write_config(
@@ -96,3 +96,19 @@ def test_native_hive_config_rejects_invalid_reasoning_effort(tmp_path, value) ->
 
     with pytest.raises(ValueError, match="reasoning_effort must be a non-empty string"):
         config.get_llm_extra_kwargs()
+
+
+def test_native_hive_config_null_reasoning_effort_preserves_provider_default(tmp_path) -> None:
+    config = _load_config_module()
+    config.HIVE_CONFIG_FILE = _write_config(
+        tmp_path,
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-test",
+                "reasoning_effort": None,
+            }
+        },
+    )
+
+    assert config.get_llm_extra_kwargs() == {}
