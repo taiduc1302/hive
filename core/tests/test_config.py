@@ -122,8 +122,7 @@ class TestReasoningEffortConfig:
     def test_worker_subscription_without_token_falls_back_to_ollama(self, tmp_path, monkeypatch):
         config_file = tmp_path / "configuration.json"
         config_file.write_text(
-            '{"worker_llm":{"provider":"ollama","model":"local","use_claude_code_subscription":true,'
-            '"num_ctx":32768,"reasoning_effort":"low"}}',
+            '{"worker_llm":{"provider":"ollama","model":"local","use_claude_code_subscription":true,"num_ctx":32768,"reasoning_effort":"low"}}',
             encoding="utf-8",
         )
         monkeypatch.setattr("framework.config.HIVE_CONFIG_FILE", config_file)
